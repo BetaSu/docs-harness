@@ -1,0 +1,37 @@
+{
+  "name": "docs-harness",
+  "version": "0.1.0",
+  "description": "Agent-first project document graph CLI.",
+  "type": "module",
+  "bin": {
+    "docs-harness": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "prepack": "npm run clean && npm run build",
+    "test": "npm run build && node --test test/*.test.js"
+  },
+  "keywords": [
+    "agent",
+    "cli",
+    "documentation",
+    "docs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0"
+  }
+}
