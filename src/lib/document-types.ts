@@ -1,7 +1,5 @@
-import { join } from 'node:path';
-
 import { fileExists, readTextFile } from './files.js';
-import { getDocumentTypesPath, getHarnessDirectory } from './project.js';
+import { getDocumentTypesPath } from './project.js';
 
 export type DocumentTypeName = 'architecture' | 'constraints' | 'readme' | 'route' | 'runbook';
 
@@ -131,11 +129,9 @@ const BUILTIN_DOCUMENT_TYPES: Record<DocumentTypeName, DocumentTypeDefinition> =
 
 export async function loadDocumentTypes(root: string): Promise<DocumentTypeDefinition[]> {
   const registryPath = getDocumentTypesPath(root);
-  const legacyPath = join(getHarnessDirectory(root), 'document-types.json');
-  const sourcePath = fileExists(registryPath) ? registryPath : legacyPath;
-  if (!fileExists(sourcePath)) return getBuiltinDocumentTypes();
+  if (!fileExists(registryPath)) return getBuiltinDocumentTypes();
 
-  const registry = JSON.parse(await readTextFile(sourcePath)) as {
+  const registry = JSON.parse(await readTextFile(registryPath)) as {
     types?: DocumentTypeDefinition[];
   };
   if (!Array.isArray(registry.types)) return getBuiltinDocumentTypes();
@@ -151,8 +147,7 @@ export async function getDocumentType(
   root: string,
   typeName: string,
 ): Promise<DocumentTypeDefinition | undefined> {
-  const normalizedType = typeName === 'agents' ? 'route' : typeName;
-  return (await loadDocumentTypes(root)).find((definition) => definition.name === normalizedType);
+  return (await loadDocumentTypes(root)).find((definition) => definition.name === typeName);
 }
 
 export function getBuiltinDocumentTypes(): DocumentTypeDefinition[] {

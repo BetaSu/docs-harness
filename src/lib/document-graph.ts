@@ -39,7 +39,7 @@ export type DocumentGraph = {
   routeFileName: string;
 };
 
-type DocumentDocument = {
+export type DocumentDocument = {
   path: string;
   content: string;
   entries: DocumentEntry[];

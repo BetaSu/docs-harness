@@ -17,6 +17,7 @@ docs-harness types list
 docs-harness types describe runbook
 docs-harness write --type runbook --path packages/api --name deploy --description "Deploy the API." --body @runbook.md --dry-run
 docs-harness skills read core
+docs-harness skills read document-repair
 ```
 
 Success envelope:
@@ -76,6 +77,16 @@ docs-harness show packages/api/AGENTS
 docs-harness validate
 ```
 
+`validate` returns `data.valid` plus structured `data.issues`. It checks graph
+links, duplicate names, route entry syntax, document metadata, required sections,
+unknown document types, and hard line limits. Each issue includes a `hint` field
+that should be usable by an agent. When repair requires more than a short hint,
+the hint points to:
+
+```bash
+docs-harness skills read document-repair
+```
+
 `write` maintains these relation lines by default. It finds the nearest ancestor
 route file, then adds or updates one entry using the document metadata:
 
@@ -99,7 +110,8 @@ Use `--no-route-entry` only for explicit unlinked drafts or migration steps.
 
 `types` exposes document type contracts. After init, projects can override or add
 types by editing `.docs-harness/registry/document-types.json`. Before init, the
-CLI falls back to its bundled defaults.
+CLI falls back to its bundled defaults. The project-local registry path is the
+only supported override location.
 
 ```bash
 docs-harness types list

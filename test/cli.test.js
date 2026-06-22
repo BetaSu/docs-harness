@@ -48,6 +48,11 @@ test('skills list returns compact success envelope by default', () => {
   assert.equal(envelope.ok, true);
   assert.deepEqual(Object.keys(envelope).sort(), ['data', 'ok']);
   assert.equal(envelope.data.skills[0].name, 'core');
+  assert.ok(envelope.data.skills.some((skill) => skill.name === 'document-repair'));
+
+  const repairEnvelope = run(['skills', 'read', 'document-repair'], { cwd: process.cwd() });
+  assert.equal(repairEnvelope.ok, true);
+  assert.match(repairEnvelope.data.content, /missing_required_section/);
 });
 
 test('schema is the default machine-readable command contract', () => {
@@ -72,6 +77,11 @@ test('schema is the default machine-readable command contract', () => {
   );
   const agentArg = initEnvelope.data.command.args.find((arg) => arg.name === 'agent');
   assert.deepEqual(agentArg.values, ['codex', 'claude']);
+
+  const validateEnvelope = run(['schema', '--command', 'validate'], { cwd: process.cwd() });
+  assert.equal(validateEnvelope.ok, true);
+  assert.equal(validateEnvelope.data.command.output.valid, 'boolean');
+  assert.ok(Array.isArray(validateEnvelope.data.command.output.issues));
 });
 
 test('insight lists entries from nearest AGENTS.md', () => {
@@ -105,7 +115,63 @@ test('validate reports graph errors inside data', () => {
   const envelope = run(['validate', '--root', root], { cwd: root });
   assert.equal(envelope.ok, true);
   assert.equal(envelope.data.valid, false);
-  assert.ok(envelope.data.errors.some((error) => error.includes('target_not_found')));
+  assert.equal(envelope.data.errors, undefined);
+  assert.ok(
+    envelope.data.issues.some(
+      (issue) =>
+        issue.code === 'target_not_found' &&
+        issue.path === 'AGENTS.md' &&
+        issue.hint.includes('docs-harness write --dry-run'),
+    ),
+  );
+});
+
+test('validate reports document structure issues with repair hints', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-validate-structure-'));
+  writeFileSync(
+    join(root, 'README.md'),
+    ['# Demo', '', '## 是什么', 'Project.', '', '## 怎么用', 'Read it.', ''].join('\n'),
+  );
+  run(['init', '--agent', 'codex', '--yes', '--root', root], { cwd: root });
+
+  const envelope = run(['validate', '--root', root], { cwd: root });
+  assert.equal(envelope.ok, true);
+  assert.equal(envelope.data.valid, false);
+  const issue = envelope.data.issues.find(
+    (candidate) =>
+      candidate.code === 'missing_required_section' &&
+      candidate.path === 'README.md' &&
+      candidate.type === 'readme',
+  );
+  assert.ok(issue);
+  assert.match(issue.message, /为什么/);
+  assert.match(issue.hint, /## 为什么/);
+  assert.match(issue.hint, /docs-harness skills read document-repair/);
+});
+
+test('validate reports hard line limit issues with repair skill hint', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-validate-line-limit-'));
+  const filler = Array.from({ length: 205 }, (_, index) => `Line ${index + 1}.`);
+  writeFileSync(
+    join(root, 'README.md'),
+    ['# Demo', '', '## 是什么', 'Project.', '', '## 为什么', 'Overview.', '', '## 怎么用', ...filler, ''].join(
+      '\n',
+    ),
+  );
+  run(['init', '--agent', 'codex', '--yes', '--root', root], { cwd: root });
+
+  const envelope = run(['validate', '--root', root], { cwd: root });
+  assert.equal(envelope.ok, true);
+  assert.equal(envelope.data.valid, false);
+  const issue = envelope.data.issues.find(
+    (candidate) =>
+      candidate.code === 'hard_line_limit_exceeded' &&
+      candidate.path === 'README.md' &&
+      candidate.type === 'readme',
+  );
+  assert.ok(issue);
+  assert.match(issue.message, /200/);
+  assert.match(issue.hint, /docs-harness skills read document-repair/);
 });
 
 test('init previews AGENTS.md setup without writing', () => {
@@ -215,6 +281,44 @@ test('types prefer project-local registry written by init', () => {
     ),
   );
   assert.ok(JSON.parse(readFileSync(registryPath, 'utf8')).types.some((type) => type.name === 'decision'));
+});
+
+test('types ignore legacy registry path and removed aliases', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-types-no-compat-'));
+  run(['init', '--agent', 'codex', '--yes', '--root', root], { cwd: root });
+  writeFileSync(
+    join(root, '.docs-harness/document-types.json'),
+    JSON.stringify(
+      {
+        types: [
+          {
+            name: 'legacy',
+            purpose: 'Legacy path.',
+            useWhen: ['Legacy path exists.'],
+            pathPattern: 'docs/legacy/{name}.md',
+            requiresName: true,
+            requiresDescription: true,
+            requiresReadme: false,
+            requiresRoute: false,
+            softLineLimit: 80,
+            hardLineLimit: 120,
+            sections: [{ heading: 'Legacy', required: true }],
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+
+  const listEnvelope = run(['types', 'list', '--root', root], { cwd: root });
+  assert.equal(listEnvelope.ok, true);
+  assert.equal(listEnvelope.data.types.some((type) => type.name === 'legacy'), false);
+
+  const aliasResult = runFailure(['types', 'describe', 'agents', '--root', root], { cwd: root });
+  assert.equal(aliasResult.status, 1);
+  assert.equal(aliasResult.envelope.ok, false);
+  assert.equal(aliasResult.envelope.error.type, 'not_found');
 });
 
 test('write previews readme without writing', () => {

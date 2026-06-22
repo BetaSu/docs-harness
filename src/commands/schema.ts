@@ -24,6 +24,7 @@ type CommandSchema = {
     writes?: string[];
   };
   branches: string[];
+  output?: Record<string, unknown>;
 };
 
 const COMMANDS: CommandSchema[] = [
@@ -81,18 +82,32 @@ const COMMANDS: CommandSchema[] = [
   {
     id: 'validate',
     path: ['validate'],
-    summary: 'Validate document graph links.',
+    summary: 'Validate document graph links and document type structure.',
     type: 'diagnostic',
     args: [{ name: 'root', type: 'path', required: false }],
     capabilities: {
       output: { envelope: 'json', stdout: 'json-only' },
     },
     branches: ['success'],
+    output: {
+      valid: 'boolean',
+      issues: [
+        {
+          code: 'string',
+          path: 'string',
+          message: 'string',
+          hint: 'string',
+          line: 'number?',
+          name: 'string?',
+          type: 'string?',
+        },
+      ],
+    },
   },
   {
     id: 'graph',
     path: ['graph'],
-    summary: 'Return document graph nodes, entries, and validation errors.',
+    summary: 'Return document graph nodes, entries, and validation issues.',
     type: 'diagnostic',
     args: [{ name: 'root', type: 'path', required: false }],
     capabilities: {
