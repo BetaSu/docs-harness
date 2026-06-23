@@ -12,6 +12,7 @@ import {
 } from './files.js';
 import { parseMetadata } from './markdown.js';
 import { loadRuntimeConfig } from './config.js';
+import { createIgnoreMatcher } from './ignore.js';
 import {
   loadDocumentTypes,
   resolveDocumentTypePath,
@@ -24,6 +25,7 @@ export type DocumentEntry = {
   source: string;
   line: number;
   target?: DocumentTarget;
+  ignoredTarget?: IgnoredDocument;
   errors: string[];
 };
 
@@ -38,6 +40,7 @@ export type DocumentTarget = {
 export type DocumentGraph = {
   documents: DocumentDocument[];
   entries: DocumentEntry[];
+  ignoredDocuments: IgnoredDocument[];
   reachableRoutePaths: Set<string>;
   routeCycles: RouteCycle[];
   targets: DocumentTarget[];
@@ -52,6 +55,12 @@ export type DocumentDocument = {
   entries: DocumentEntry[];
   isTarget: boolean;
   target: DocumentTarget;
+};
+
+export type IgnoredDocument = {
+  name: string;
+  path: string;
+  kind: string;
 };
 
 export type RouteCycle = {
@@ -74,12 +83,23 @@ export async function loadDocumentGraph(root: string): Promise<DocumentGraph> {
   const config = await loadRuntimeConfig(root);
   const documentTypes = await loadDocumentTypes(root);
   const targetableTypeNames = new Set(documentTypes.map((type) => type.name));
+  const isIgnored = createIgnoreMatcher(config.ignore);
   const markdownFiles = await collectMarkdownFiles(root);
   const documents: DocumentDocument[] = [];
+  const ignoredDocuments: IgnoredDocument[] = [];
 
   for (const path of markdownFiles) {
     const content = await readTextFile(resolvePath(root, path));
     const target = buildTarget(path, content, config.instructionFileName, documentTypes);
+    if (isIgnored(path)) {
+      ignoredDocuments.push({
+        name: target.name,
+        path: target.path,
+        kind: target.kind,
+      });
+      continue;
+    }
+
     documents.push({
       path,
       content,
@@ -99,20 +119,36 @@ export async function loadDocumentGraph(root: string): Promise<DocumentGraph> {
     if (duplicateNames.has(target.name)) continue;
     targetByName.set(target.name, target);
   }
+  const ignoredTargetByName = buildIgnoredTargetMap(ignoredDocuments);
 
-  const entries = documents
-    .filter((document) => document.target.kind === 'route')
-    .flatMap((document) =>
-      document.entries.map((entry) => ({
+  const entries: DocumentEntry[] = [];
+  for (const document of documents.filter((candidate) => candidate.target.kind === 'route')) {
+    for (const entry of document.entries) {
+      const target = targetByName.get(entry.name);
+      const ignoredTarget =
+        target
+          ? undefined
+          : ignoredTargetByName.get(entry.name) ??
+            (await findIgnoredDocumentByEntryName(
+              root,
+              entry.name,
+              config.instructionFileName,
+              documentTypes,
+              isIgnored,
+            ));
+      entries.push({
         ...entry,
-        target: targetByName.get(entry.name),
+        target,
+        ignoredTarget,
         errors: [
           ...entry.errors,
-          ...(entry.name && !targetByName.has(entry.name) ? ['target_not_found'] : []),
+          ...(entry.name && !target && ignoredTarget ? ['ignored_target_referenced'] : []),
+          ...(entry.name && !target && !ignoredTarget ? ['target_not_found'] : []),
           ...(entry.name && duplicateNames.has(entry.name) ? ['target_name_duplicate'] : []),
         ],
-      })),
-    );
+      });
+    }
+  }
   const documentByPath = new Map(documents.map((document) => [document.path, document]));
   const reachableRoutePaths = collectReachableRoutePaths(
     documents,
@@ -125,6 +161,7 @@ export async function loadDocumentGraph(root: string): Promise<DocumentGraph> {
   return {
     documents,
     entries,
+    ignoredDocuments,
     reachableRoutePaths,
     routeCycles,
     targets,
@@ -140,6 +177,7 @@ export async function findNearestRoute(root: string, inputPath: string): Promise
 
 export async function findNearestRouteContext(root: string, inputPath: string): Promise<RouteContext> {
   const config = await loadRuntimeConfig(root);
+  const isIgnored = createIgnoreMatcher(config.ignore);
   const absolute = resolvePath(root, inputPath || '.');
   assertInsideRoot(root, absolute, inputPath || '.');
 
@@ -149,7 +187,7 @@ export async function findNearestRouteContext(root: string, inputPath: string): 
 
   while (true) {
     const candidate = join(current, config.instructionFileName);
-    if (fileExists(candidate)) {
+    if (fileExists(candidate) && !isIgnored(toProjectPath(root, candidate))) {
       const modulePath = toProjectPath(root, current);
       return {
         fallback: modulePath !== requestedModulePath,
@@ -193,6 +231,21 @@ export function getTargetOrThrow(graph: DocumentGraph, name: string): DocumentTa
 
   const target = graph.targetByName.get(name) ?? graph.targetByName.get(stripMarkdownExtension(name));
   if (target) return target;
+
+  const ignoredDocument = graph.ignoredDocuments.find(
+    (document) =>
+      document.name === name ||
+      document.name === stripMarkdownExtension(name) ||
+      document.path === name ||
+      document.path === `${stripMarkdownExtension(name)}.md`,
+  );
+  if (ignoredDocument) {
+    throw new CliError({
+      code: 'document_ignored',
+      message: `Document is excluded by docs-harness ignore config: ${ignoredDocument.path}.`,
+      hint: 'Remove or narrow the `ignore` rule if this document should be managed, then rerun `docs-harness validate`.',
+    });
+  }
 
   const nonTargetDocument = graph.documents.find(
     (document) =>
@@ -281,6 +334,52 @@ function findDuplicateNames(targets: DocumentTarget[]): Map<string, string[]> {
     if (paths.length > 1) duplicates.set(name, paths);
   }
   return duplicates;
+}
+
+function buildIgnoredTargetMap(ignoredDocuments: IgnoredDocument[]): Map<string, IgnoredDocument> {
+  const ignoredTargetByName = new Map<string, IgnoredDocument>();
+  for (const document of ignoredDocuments) {
+    for (const name of new Set([
+      document.name,
+      stripMarkdownExtension(document.name),
+      document.path,
+      stripMarkdownExtension(document.path),
+    ])) {
+      if (name) ignoredTargetByName.set(name, document);
+    }
+  }
+  return ignoredTargetByName;
+}
+
+async function findIgnoredDocumentByEntryName(
+  root: string,
+  name: string,
+  routeFileName: string,
+  documentTypes: DocumentTypeDefinition[],
+  isIgnored: (path: string) => boolean,
+): Promise<IgnoredDocument | undefined> {
+  if (!name) return undefined;
+
+  const candidatePaths = new Set([
+    name.endsWith('.md') ? name : `${stripMarkdownExtension(name)}.md`,
+  ]);
+
+  for (const candidatePath of candidatePaths) {
+    const absolutePath = resolvePath(root, candidatePath);
+    const projectPath = toProjectPath(root, absolutePath);
+    if (projectPath === '..' || projectPath.startsWith('../')) continue;
+    if (!isIgnored(projectPath) || !fileExists(absolutePath)) continue;
+
+    const content = await readTextFile(absolutePath);
+    const target = buildTarget(projectPath, content, routeFileName, documentTypes);
+    return {
+      name: target.name,
+      path: target.path,
+      kind: target.kind,
+    };
+  }
+
+  return undefined;
 }
 
 function isTargetable(

@@ -65,6 +65,15 @@ The initial registry lives under `.docs-harness/registry/`. Document type
 contracts are written to `.docs-harness/registry/document-types.json` on first
 init and are not overwritten when init is run again.
 
+`.docs-harness/config.json` also contains `ignore`, a gitignore-style adoption
+boundary for Markdown files that are not ready for docs-harness management. The
+default ignore list covers `.git/**`, `node_modules/**`, `dist/**`, `build/**`,
+`coverage/**`, and `.docs-harness/logs/**`. Ignored Markdown is not scanned as a
+target, cannot be read by stable name, does not produce `non_target_document`
+signals, and does not participate in validation. If a route entry points to an
+ignored document, validation reports `ignored_target_referenced` so the route and
+ignore boundary cannot disagree silently.
+
 ## Local Packaging
 
 Use the local packaging flow before publishing or testing an installable CLI:
@@ -91,7 +100,8 @@ are ignored by `.docs-harness/.gitignore`.
 Markdown files outside the stable target set are still scanned. They are not
 readable by stable name unless converted into a route, README, or configured
 typed document; graph or insight execution can emit a `non_target_document`
-signal for later review.
+signal for later review. Use config `ignore` only for Markdown intentionally
+outside the current adoption scope.
 
 ## Document Relations
 
@@ -131,11 +141,11 @@ the root, not direct parent routing.
 `validate` succeeds only when the document graph is valid. On success, it returns
 `data.valid=true`. When validation fails, the command returns `ok:false` with
 `error.code="validation_failed"` and structured `error.issues`. It checks graph
-links, duplicate names, route entry syntax, indexed description metadata,
-route-description drift, root-route reachability, route cycles, and typed
-document hard line limits. It does not enforce typed document headings during
-validate, because existing documents may be written in different languages. Each
-issue includes a
+links, duplicate names, route entry syntax, ignored target references, indexed
+description metadata, route-description drift, root-route reachability, route
+cycles, and typed document hard line limits. It does not enforce typed document
+headings during validate, because existing documents may be written in different
+languages. Each issue includes a
 `hint` field that should be usable by an agent. Blocking document graph, route,
 metadata, and line-limit hints may point to internal repair workflows such as
 `skills.read document-repair`.
@@ -144,7 +154,9 @@ Optimization signals in `.docs-harness/logs/<YYYY-MM-DD>/signal.jsonl`
 represent non-blocking problems found during command execution that affect
 document usefulness and need agent judgment rather than automatic repair. For
 example, a README that is not discoverable from a reachable route can emit
-`readme_unindexed` for later review instead of failing validation.
+`readme_unindexed` for later review instead of failing validation. Successful
+`validate` runs write global optimization signals while keeping stdout focused on
+hard validation issues only.
 
 Signal, intent, and skill-reading commands are internal workflow commands. They
 are not returned by default `schema` output, but their contracts are available

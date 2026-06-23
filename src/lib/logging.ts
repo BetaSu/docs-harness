@@ -90,7 +90,7 @@ export async function collectCommandSignals(input: {
   root: string;
   startedAt: Date;
 }): Promise<Signal[]> {
-  if (!new Set(['graph', 'insight', 'read']).has(input.args.command)) return [];
+  if (!new Set(['graph', 'insight', 'read', 'validate']).has(input.args.command)) return [];
 
   try {
     const graph = await loadDocumentGraph(input.root);
@@ -153,6 +153,7 @@ function collectSignalCandidates(
   if (command === 'insight') return collectInsightSignals(result, graph);
   if (command === 'read') return collectReadSignals(result, graph);
   if (command === 'graph') return collectGraphSignals(graph);
+  if (command === 'validate') return collectGraphSignals(graph);
   return [];
 }
 

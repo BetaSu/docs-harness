@@ -14,6 +14,7 @@ import {
   writeTextFile,
 } from "../lib/files.js";
 import { serializeBuiltinDocumentTypes } from "../lib/document-types.js";
+import { DEFAULT_IGNORE_PATTERNS } from "../lib/ignore.js";
 import {
   getConfigPath,
   getHarnessDirectory,
@@ -59,6 +60,7 @@ export async function commandInit(
     version: 1,
     agent: target.agent,
     instructionFile: target.instructionFile,
+    ignore: DEFAULT_IGNORE_PATTERNS,
   };
   const routeContent = await buildRouteContent(root, target.instructionFile);
   const documentTypesContent = serializeBuiltinDocumentTypes();

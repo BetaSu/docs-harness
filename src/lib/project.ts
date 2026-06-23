@@ -16,6 +16,7 @@ export type HarnessConfig = {
   version: 1;
   instructionFile: string;
   agent: AgentKind;
+  ignore: string[];
 };
 
 export function resolveProjectRoot(args: ParsedArgs): string {

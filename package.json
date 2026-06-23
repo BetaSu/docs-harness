@@ -35,5 +35,8 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "ignore": "^7.0.5"
   }
 }

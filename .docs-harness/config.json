@@ -1,5 +1,13 @@
 {
   "version": 1,
   "agent": "generic",
-  "instructionFile": "AGENTS.md"
+  "instructionFile": "AGENTS.md",
+  "ignore": [
+    ".git/**",
+    "node_modules/**",
+    "dist/**",
+    "build/**",
+    "coverage/**",
+    ".docs-harness/logs/**"
+  ]
 }

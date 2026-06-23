@@ -13,6 +13,14 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const CLI = new URL('../dist/cli.js', import.meta.url).pathname;
+const DEFAULT_IGNORE = [
+  '.git/**',
+  'node_modules/**',
+  'dist/**',
+  'build/**',
+  'coverage/**',
+  '.docs-harness/logs/**',
+];
 
 function createProject() {
   const root = mkdtempSync(join(tmpdir(), 'docs-harness-'));
@@ -261,6 +269,7 @@ test('schema is the default machine-readable command contract', () => {
   const readSchema = run(['schema', '--command', 'read'], { cwd: process.cwd() });
   assert.equal(readSchema.ok, true);
   assert.ok(readSchema.data.command.args.some((arg) => arg.name === 'intent'));
+  assert.ok(readSchema.data.command.branches.includes('document_ignored'));
   assert.ok(readSchema.data.command.branches.includes('non_target_document'));
   assert.equal(readSchema.data.command.output.description, 'string');
   assert.equal(readSchema.data.command.output.path, 'string');
@@ -291,6 +300,7 @@ test('schema is the default machine-readable command contract', () => {
   assert.ok(validateCodes.includes('unreachable_route'));
   assert.ok(validateCodes.includes('route_cycle'));
   assert.ok(validateCodes.includes('hard_line_limit_exceeded'));
+  assert.ok(validateCodes.includes('ignored_target_referenced'));
   assert.equal(validateCodes.includes('missing_required_section'), false);
   assert.equal(validateCodes.includes('missing_sibling_readme'), false);
   assert.equal(validateCodes.includes('missing_sibling_route'), false);
@@ -909,6 +919,8 @@ test('init writes CLAUDE.md and configures future route lookup', () => {
   assert.match(routeContent, /docs-harness write --type <type> .* --yes/);
   assert.equal(existsSync(join(root, '.docs-harness/logs')), true);
   assert.match(readFileSync(join(root, '.docs-harness/.gitignore'), 'utf8'), /logs\//);
+  const config = JSON.parse(readFileSync(join(root, '.docs-harness/config.json'), 'utf8'));
+  assert.deepEqual(config.ignore, DEFAULT_IGNORE);
 
   const insightEnvelope = run(['insight', '.', '--root', root], { cwd: root });
   assert.equal(insightEnvelope.ok, true);
@@ -1220,6 +1232,166 @@ test('non-target document is scanned as a signal but not exposed as a graph targ
   assert.match(signal.suggestion, /consolidate it into the right complete functional entity/);
   assert.match(signal.suggestion, /delete the original loose document/);
   assert.match(signal.suggestion, /mark this signal handled/);
+});
+
+test('validate writes global non-blocking optimization signals on success', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-validate-signal-'));
+  writeFileSync(
+    join(root, 'README.md'),
+    [
+      '---',
+      'description: Use when understanding project overview, directory responsibilities, or basic usage.',
+      '---',
+      '',
+      '# Demo',
+      '',
+    ].join('\n'),
+  );
+  run(['init', '--agent', 'generic', '--yes', '--root', root], { cwd: root });
+  mkdirSync(join(root, 'notes'), { recursive: true });
+  writeFileSync(
+    join(root, 'notes/context.md'),
+    ['# Context', '', 'Loose project notes that may or may not belong in docs.', ''].join('\n'),
+  );
+
+  const validateEnvelope = run(['validate', '--root', root], { cwd: root });
+  assert.equal(validateEnvelope.ok, true);
+  assert.equal(validateEnvelope.data.valid, true);
+  assert.deepEqual(validateEnvelope.data.issues, []);
+
+  const signal = waitForValue(
+    () =>
+      readSignals(root).find(
+        (record) =>
+          record.frictionPattern === 'non_target_document' &&
+          record.target.path === 'notes/context.md',
+      ),
+    'validate non_target_document signal',
+  );
+  assert.equal(signal.handled, false);
+  assert.equal(signal.target.name, 'notes/context');
+
+  const runEntry = waitForValue(
+    () => readRuns(root).find((entry) => entry.command === 'validate' && entry.signalCount > 0),
+    'validate run with signalCount',
+  );
+  assert.equal(runEntry.ok, true);
+});
+
+test('config ignore excludes markdown from target scan and non-target signals', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-ignore-non-target-'));
+  writeFileSync(
+    join(root, 'README.md'),
+    [
+      '---',
+      'description: Use when understanding project overview, directory responsibilities, or basic usage.',
+      '---',
+      '',
+      '# Demo',
+      '',
+    ].join('\n'),
+  );
+  run(['init', '--agent', 'generic', '--yes', '--root', root], { cwd: root });
+  const configPath = join(root, '.docs-harness/config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  writeFileSync(
+    configPath,
+    `${JSON.stringify({ ...config, ignore: [...config.ignore, 'notes/**'] }, null, 2)}\n`,
+  );
+  mkdirSync(join(root, 'notes'), { recursive: true });
+  writeFileSync(
+    join(root, 'notes/context.md'),
+    ['# Context', '', 'Loose project notes intentionally outside adoption scope.', ''].join('\n'),
+  );
+
+  const graphEnvelope = run(['graph', '--root', root], { cwd: root });
+  assert.equal(graphEnvelope.ok, true);
+  assert.equal(
+    graphEnvelope.data.nodes.some((node) => node.path === 'notes/context.md'),
+    false,
+  );
+
+  const validateEnvelope = run(['validate', '--root', root], { cwd: root });
+  assert.equal(validateEnvelope.ok, true);
+  assert.equal(validateEnvelope.data.valid, true);
+
+  const readResult = runFailure(['read', 'notes/context', '--root', root], { cwd: root });
+  assert.equal(readResult.status, 1);
+  assert.equal(readResult.envelope.error.code, 'document_ignored');
+  assert.match(readResult.envelope.error.message, /notes\/context\.md/);
+
+  waitForValue(
+    () => readRuns(root).some((record) => record.command === 'graph'),
+    'graph run for ignored markdown',
+  );
+  assert.equal(
+    readSignals(root).some(
+      (record) =>
+        record.frictionPattern === 'non_target_document' &&
+        record.target.path === 'notes/context.md',
+    ),
+    false,
+  );
+});
+
+test('validate reports route entries that point to ignored markdown', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-ignore-route-target-'));
+  writeFileSync(
+    join(root, 'README.md'),
+    [
+      '---',
+      'description: Use when understanding project overview, directory responsibilities, or basic usage.',
+      '---',
+      '',
+      '# Demo',
+      '',
+    ].join('\n'),
+  );
+  run(['init', '--agent', 'generic', '--yes', '--root', root], { cwd: root });
+  const configPath = join(root, '.docs-harness/config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  writeFileSync(
+    configPath,
+    `${JSON.stringify({ ...config, ignore: [...config.ignore, 'notes/**'] }, null, 2)}\n`,
+  );
+  mkdirSync(join(root, 'notes'), { recursive: true });
+  writeFileSync(
+    join(root, 'notes/context.md'),
+    [
+      '---',
+      'name: notes/context',
+      'description: Use when reviewing legacy context.',
+      '---',
+      '',
+      '# Context',
+      '',
+    ].join('\n'),
+  );
+  writeFileSync(
+    join(root, 'AGENTS.md'),
+    `${readFileSync(join(root, 'AGENTS.md'), 'utf8')}
+- [agent-index] name="notes/context" description="Use when reviewing legacy context."
+`,
+  );
+
+  const result = runFailure(['validate', '--root', root], { cwd: root });
+  assert.equal(result.status, 1);
+  assert.equal(result.envelope.error.code, 'validation_failed');
+  assert.ok(
+    result.envelope.error.issues.some(
+      (issue) =>
+        issue.code === 'ignored_target_referenced' &&
+        issue.name === 'notes/context' &&
+        issue.path === 'AGENTS.md' &&
+        issue.hint.includes('notes/context.md'),
+    ),
+  );
+  assert.equal(
+    result.envelope.error.issues.some(
+      (issue) => issue.code === 'target_not_found' && issue.name === 'notes/context',
+    ),
+    false,
+  );
 });
 
 test('init requires confirmation before writing', () => {

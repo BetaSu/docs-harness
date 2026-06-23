@@ -180,7 +180,7 @@ When running \`${context.cli} insight\` or \`${context.cli} read\` for a real ta
 function renderProjectRegistry(context: SkillTemplateContext): string {
   return `## Project Registry
 
-After init, document type contracts are read from \`.docs-harness/registry/document-types.json\`. Treat that file as the project-local source of truth. Before init, \`${context.cli}\` falls back to bundled defaults. Repair workflows must use \`${context.typesListCommand}\` and \`${context.typesDescribeCommand}\`; do not hard-code document type guidance or line limits.`;
+After init, document type contracts are read from \`.docs-harness/registry/document-types.json\`. Treat that file as the project-local source of truth. The project config may also define gitignore-style \`ignore\` patterns for Markdown that is intentionally outside the current adoption scope. Before init, \`${context.cli}\` falls back to bundled defaults. Repair workflows must use \`${context.typesListCommand}\` and \`${context.typesDescribeCommand}\`; do not hard-code document type guidance or line limits.`;
 }
 
 function renderDocumentTypeContracts(context: SkillTemplateContext): string {
@@ -260,7 +260,7 @@ Exit status mirrors ok: 0 for ok=true, nonzero for ok=false.`;
 function renderLogs(context: SkillTemplateContext): string {
   return `## Logs
 
-After init, commands may write execution records to \`.docs-harness/logs/<YYYY-MM-DD>/runs.jsonl\`. insight/read calls may include an intent field when \`--intent\` is supplied; use \`${context.intentListCommand}\` to inspect these observations. Commands may also write optimization signals to \`${context.signalLogPath}\` for document-quality friction discovered during execution: non-blocking problems that cannot be automatically repaired and affect the practical document experience. Generated logs are ignored by \`.docs-harness/.gitignore\`.`;
+After init, commands may write execution records to \`.docs-harness/logs/<YYYY-MM-DD>/runs.jsonl\`. insight/read calls may include an intent field when \`--intent\` is supplied; use \`${context.intentListCommand}\` to inspect these observations. Commands may also write optimization signals to \`${context.signalLogPath}\` for document-quality friction discovered during execution: non-blocking problems that cannot be automatically repaired and affect the practical document experience. Successful \`${context.validateCommand}\` runs write global optimization signals while keeping stdout focused on hard validation issues. Generated logs are ignored by \`.docs-harness/.gitignore\`.`;
 }
 
 function renderErrorRecovery(context: SkillTemplateContext): string {
@@ -268,6 +268,8 @@ function renderErrorRecovery(context: SkillTemplateContext): string {
 
 - unknown_flag, unknown_command, unknown_*_action, unknown_agent, missing_required_argument, path_not_directory, path_outside_root: fix the command arguments and retry.
 - document_not_found, document_type_not_found, skill_not_found, command_schema_not_found: run the relevant list, insight, schema, or validate command to discover valid names.
+- document_ignored: remove or narrow the config \`ignore\` rule if the document should be managed, or choose a managed document instead.
+- ignored_target_referenced: remove or narrow the config \`ignore\` rule for that target, or remove the route entry.
 - non_target_document: read the repair workflow and convert, migrate, or remove the existing non-target document.
 - route_not_found: initialize \`${context.cli}\`, create the needed route, or pass \`--no-route-entry\` only when the user explicitly wants an unlinked document.
 - validation_failed: read error.issues and repair each issue by code.

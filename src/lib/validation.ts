@@ -9,6 +9,7 @@ export type ValidationIssue = {
     | 'description_mismatch'
     | 'duplicate_name'
     | 'hard_line_limit_exceeded'
+    | 'ignored_target_referenced'
     | 'missing_description'
     | 'missing_metadata_description'
     | 'missing_name'
@@ -83,6 +84,19 @@ function validateEntry(entry: DocumentEntry): ValidationIssue[] {
         code: 'target_not_found' as const,
         message: `Agent-index target was not found: ${entry.name || '<missing>'}.`,
         hint: repairHint('Create the target document with `docs-harness write --dry-run`, or fix the entry name.'),
+      };
+    }
+
+    if (error === 'ignored_target_referenced') {
+      return {
+        ...base,
+        code: 'ignored_target_referenced' as const,
+        message: `Agent-index target is excluded by docs-harness ignore config: ${entry.name || '<missing>'}.`,
+        hint: repairHint(
+          entry.ignoredTarget
+            ? `Remove or narrow the \`ignore\` rule for \`${entry.ignoredTarget.path}\`, or remove this route entry.`
+            : 'Remove or narrow the `ignore` rule for this target, or remove this route entry.',
+        ),
       };
     }
 
