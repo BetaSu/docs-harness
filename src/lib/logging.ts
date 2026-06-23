@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import type { ParsedArgs } from './args.js';
 import { fileExists } from './files.js';
 import { getConfigPath, getLogsDirectory } from './project.js';
+import { loadRuntimeConfig } from './config.js';
+import { createIgnoreMatcher, isSignalTargetIgnored } from './ignore.js';
 import {
   loadDocumentGraph,
   type DocumentEntry,
@@ -94,15 +96,19 @@ export async function collectCommandSignals(input: {
 
   try {
     const graph = await loadDocumentGraph(input.root);
+    const config = await loadRuntimeConfig(input.root);
+    const isIgnored = createIgnoreMatcher(config.ignore);
     const createdAt = input.startedAt.toISOString();
-    return collectSignalCandidates(input.args.command, input.data, graph).map((candidate) =>
-      buildSignal({
-        version: CLI_VERSION,
-        createdAt,
-        frictionPattern: candidate.frictionPattern,
-        target: candidate.target,
-      }),
-    );
+    return collectSignalCandidates(input.args.command, input.data, graph)
+      .filter((candidate) => !isSignalTargetIgnored(candidate.target, graph.routeFileName, isIgnored))
+      .map((candidate) =>
+        buildSignal({
+          version: CLI_VERSION,
+          createdAt,
+          frictionPattern: candidate.frictionPattern,
+          target: candidate.target,
+        }),
+      );
   } catch {
     return [];
   }

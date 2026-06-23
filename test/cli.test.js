@@ -981,6 +981,92 @@ test('commands write deduplicated optimization signals discovered during executi
   assert.equal(runEntry.command, 'insight');
 });
 
+test('commands suppress optimization signals whose target scope is ignored', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-ignored-signal-'));
+  writeFileSync(
+    join(root, 'README.md'),
+    [
+      '---',
+      'description: Use when understanding project overview, directory responsibilities, or basic usage.',
+      '---',
+      '',
+      '# Demo',
+      '',
+    ].join('\n'),
+  );
+  run(['init', '--agent', 'generic', '--yes', '--root', root], { cwd: root });
+  const configPath = join(root, '.docs-harness/config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  writeFileSync(
+    configPath,
+    `${JSON.stringify({ ...config, ignore: [...config.ignore, 'legacy/**'] }, null, 2)}\n`,
+  );
+  mkdirSync(join(root, 'legacy/sub'), { recursive: true });
+
+  const envelope = run(['insight', 'legacy/sub/work.ts', '--root', root], { cwd: root });
+  assert.equal(envelope.ok, true);
+  assert.equal(envelope.data.fallback, true);
+  assert.equal(envelope.data.requestedModulePath, 'legacy/sub');
+
+  const ignoredScopeRun = waitForValue(
+    () =>
+      readRuns(root).find(
+        (entry) =>
+          entry.command === 'insight' &&
+          entry.result?.requestedModulePath === 'legacy/sub',
+      ),
+    'ignored-scope insight run',
+  );
+  assert.equal(ignoredScopeRun.signalCount, 0);
+  assert.equal(
+    readSignals(root).some(
+      (signal) =>
+        signal.frictionPattern === 'route_fallback' &&
+        signal.target.path === 'legacy/sub',
+    ),
+    false,
+  );
+});
+
+test('signal list filters historical signals by current ignore config', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-read-ignored-signal-'));
+  writeFileSync(
+    join(root, 'README.md'),
+    [
+      '---',
+      'description: Use when understanding project overview, directory responsibilities, or basic usage.',
+      '---',
+      '',
+      '# Demo',
+      '',
+    ].join('\n'),
+  );
+  run(['init', '--agent', 'generic', '--yes', '--root', root], { cwd: root });
+
+  run(['insight', 'packages/api/src', '--root', root], { cwd: root });
+  const fallbackSignal = waitForValue(
+    () => readSignals(root).find((signal) => signal.frictionPattern === 'route_fallback'),
+    'route_fallback signal before ignore',
+  );
+  assert.equal(fallbackSignal.target.path, 'packages/api/src');
+
+  const configPath = join(root, '.docs-harness/config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  writeFileSync(
+    configPath,
+    `${JSON.stringify({ ...config, ignore: [...config.ignore, 'packages/**'] }, null, 2)}\n`,
+  );
+
+  const listEnvelope = run(['signal', 'list', '--all', '--dedupe=false', '--root', root], {
+    cwd: root,
+  });
+  assert.equal(listEnvelope.ok, true);
+  assert.equal(
+    listEnvelope.data.signals.some((signal) => signal.id === fallbackSignal.id),
+    false,
+  );
+});
+
 test('graph writes complete functional entity route structure optimization signals', () => {
   const root = mkdtempSync(join(tmpdir(), 'docs-harness-route-signals-'));
   writeFileSync(

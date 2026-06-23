@@ -156,7 +156,9 @@ document usefulness and need agent judgment rather than automatic repair. For
 example, a README that is not discoverable from a reachable route can emit
 `readme_unindexed` for later review instead of failing validation. Successful
 `validate` runs write global optimization signals while keeping stdout focused on
-hard validation issues only.
+hard validation issues only. `signal list` applies the current config `ignore`
+boundary when reading stored records, so ignored scopes do not keep surfacing old
+signals.
 
 Signal, intent, and skill-reading commands are internal workflow commands. They
 are not returned by default `schema` output, but their contracts are available

@@ -1,6 +1,8 @@
 import { appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { loadRuntimeConfig } from './config.js';
+import { createIgnoreMatcher, isSignalTargetIgnored } from './ignore.js';
 import { getLogsDirectory } from './project.js';
 import type { Signal } from './signal-patterns.js';
 
@@ -63,7 +65,8 @@ export async function readSignals(input: ReadSignalsInput): Promise<ReadSignalsR
   const handled = input.handled ?? false;
   const dedupe = input.dedupe ?? true;
   const records = await readSignalRecords(input.root, { since, until, handled });
-  const signals = dedupe ? dedupeSignals(records) : records;
+  const filteredRecords = await filterIgnoredSignals(input.root, records);
+  const signals = dedupe ? dedupeSignals(filteredRecords) : filteredRecords;
   const limited =
     typeof input.limit === 'number' && input.limit >= 0 ? signals.slice(0, input.limit) : signals;
 
@@ -75,6 +78,14 @@ export async function readSignals(input: ReadSignalsInput): Promise<ReadSignalsR
     ...(since ? { since } : {}),
     ...(until ? { until } : {}),
   };
+}
+
+async function filterIgnoredSignals(root: string, records: StoredSignal[]): Promise<StoredSignal[]> {
+  const config = await loadRuntimeConfig(root);
+  const isIgnored = createIgnoreMatcher(config.ignore);
+  return records.filter((record) =>
+    !isSignalTargetIgnored(record.target, config.instructionFileName, isIgnored),
+  );
 }
 
 export async function markSignalsHandled(
