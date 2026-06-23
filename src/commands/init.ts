@@ -148,7 +148,7 @@ Do not derive file paths from \`name\` yourself. Commands return JSON envelopes 
 
 Lines shaped as \`- [agent-index] name="<name>" description="<description>"\` are document index entries:
 
-- \`description\` explains when the document should be read, and should start with "Use when"
+- \`description\` explains when the document should be read; use "Use when ..." in English or an equivalent phrase in the document language
 - \`name\` is the stable identifier of the target document
 
 ## How To Add Or Update Docs

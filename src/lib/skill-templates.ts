@@ -180,14 +180,14 @@ When running \`${context.cli} insight\` or \`${context.cli} read\` for a real ta
 function renderProjectRegistry(context: SkillTemplateContext): string {
   return `## Project Registry
 
-After init, document type contracts are read from \`.docs-harness/registry/document-types.json\`. Treat that file as the project-local source of truth. Before init, \`${context.cli}\` falls back to bundled defaults. Repair workflows must use \`${context.typesListCommand}\` and \`${context.typesDescribeCommand}\`; do not hard-code document type sections or line limits.`;
+After init, document type contracts are read from \`.docs-harness/registry/document-types.json\`. Treat that file as the project-local source of truth. Before init, \`${context.cli}\` falls back to bundled defaults. Repair workflows must use \`${context.typesListCommand}\` and \`${context.typesDescribeCommand}\`; do not hard-code document type guidance or line limits.`;
 }
 
 function renderDocumentTypeContracts(context: SkillTemplateContext): string {
   if (context.documentTypes.length === 0) {
     return `## Current Document Type Contracts
 
-No document type contracts were loaded into this skill output. Run \`${context.typesListCommand}\` and \`${context.typesDescribeCommand}\` before creating or repairing typed documents.`;
+No document type contracts were loaded into this skill output. Run \`${context.typesListCommand}\` and \`${context.typesDescribeCommand}\` before creating or repairing typed documents. Treat configured sections as writing guidance, not mandatory headings.`;
   }
 
   return `## Current Document Type Contracts
@@ -200,9 +200,7 @@ ${context.documentTypes.map(renderDocumentTypeContract).join('\n\n')}`;
 function renderDocumentTypeContract(type: DocumentTypeDefinition): string {
   const useWhen = type.useWhen.map((item) => `  - ${item}`).join('\n');
   const sections = type.sections.length
-    ? type.sections
-        .map((section) => `  - ${section.heading}${section.required ? ' (required)' : ''}`)
-        .join('\n')
+    ? type.sections.map((section) => `  - ${section.heading}`).join('\n')
     : '  - none';
 
   return `### ${type.name}
@@ -221,7 +219,7 @@ Constraints:
 - softLineLimit: ${type.softLineLimit}
 - hardLineLimit: ${type.hardLineLimit}
 
-Sections:
+Suggested sections:
 ${sections}`;
 }
 
@@ -288,7 +286,7 @@ function renderDocumentWriteFlow(context: SkillTemplateContext): string {
 
 By default, write maintains both the target document and the nearest ancestor route entry. Pass \`--no-route-entry\` only when the user explicitly wants an unlinked draft or a migration step.
 
-Document descriptions are read triggers, not summaries. Write descriptions in English and start them with "Use when ...". Route entry descriptions must match target document metadata descriptions exactly.`;
+Document descriptions are read triggers, not summaries. In English, prefer "Use when ..."; in other languages, use equivalent task-oriented phrasing. Route entry descriptions must match target document metadata descriptions exactly.`;
 }
 
 function renderCoreSafetyRules(): string {
@@ -408,7 +406,8 @@ Use this flow for both validate issues and signal repair. The goal is to improve
 3. Load current type contracts:
    - Run \`${context.typesListCommand}\`.
    - Run \`${context.typesDescribeCommand}\` for every candidate type you might create or update.
-   - Use returned fields such as requiresName, requiresDescription, sections, hardLineLimit, and pathPattern as the source of truth.
+   - Use returned fields such as requiresName, requiresDescription, hardLineLimit, and pathPattern as the source of truth.
+   - Treat sections as writing guidance only; adapt headings to the document language when needed.
 4. Classify the document shape:
    - Decide which current type contract the target should satisfy.
    - If the content mixes responsibilities, identify which parts belong in other currently configured document types.
@@ -457,7 +456,7 @@ function renderRepairSafetyRules(context: SkillTemplateContext): string {
 - Do not make a cosmetic-only fix when the document violates its current type contract or should be split.
 - Do not create README, routes, or typed documents under a path that is not a complete functional entity just to satisfy a signal.
 - Preserve existing route entry names unless a concrete validation issue requires changing them.
-- Keep descriptions task-oriented: explain when an agent should read the document, not what the document is about.`;
+- Keep descriptions task-oriented: explain when an agent should read the document, not what the document is about. For English descriptions, use the form "Use when ..."; for other languages, use an equivalent read-trigger phrase.`;
 }
 
 function joinSections(...sections: string[]): string {

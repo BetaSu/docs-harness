@@ -145,7 +145,10 @@ test('skills list returns compact success envelope by default', () => {
   assert.match(repairEnvelope.data.content, /## Current Document Type Contracts/);
   assert.match(repairEnvelope.data.content, /### runbook/);
   assert.match(repairEnvelope.data.content, /hardLineLimit: 300/);
-  assert.match(repairEnvelope.data.content, /Steps \(required\)/);
+  assert.match(repairEnvelope.data.content, /Suggested sections:/);
+  assert.match(repairEnvelope.data.content, /  - Steps/);
+  assert.match(repairEnvelope.data.content, /Treat sections as writing guidance only/);
+  assert.match(repairEnvelope.data.content, /For English descriptions, use the form "Use when \.\.\."/);
 
   const signalRepairEnvelope = run(['skills', 'read', 'signal-repair'], { cwd: process.cwd() });
   assert.equal(signalRepairEnvelope.ok, true);
@@ -287,8 +290,10 @@ test('schema is the default machine-readable command contract', () => {
   const validateCodes = validateEnvelope.data.command.output.failure.issues[0].code;
   assert.ok(validateCodes.includes('unreachable_route'));
   assert.ok(validateCodes.includes('route_cycle'));
-  assert.ok(validateCodes.includes('missing_sibling_readme'));
-  assert.ok(validateCodes.includes('missing_sibling_route'));
+  assert.ok(validateCodes.includes('hard_line_limit_exceeded'));
+  assert.equal(validateCodes.includes('missing_required_section'), false);
+  assert.equal(validateCodes.includes('missing_sibling_readme'), false);
+  assert.equal(validateCodes.includes('missing_sibling_route'), false);
 });
 
 test('insight lists entries from nearest AGENTS.md', () => {
@@ -467,28 +472,20 @@ test('validate fails with graph errors inside error.issues', () => {
   );
 });
 
-test('validate reports document structure issues with repair hints', () => {
+test('validate does not enforce typed document required sections', () => {
   const root = mkdtempSync(join(tmpdir(), 'docs-harness-validate-structure-'));
   writeFileSync(
+    join(root, 'AGENTS.md'),
+    ['# Instructions', '', '## Document Graph Entries', '', ''].join('\n'),
+  );
+  writeFileSync(
     join(root, 'README.md'),
-    ['# Demo', '', '## What It Is', 'Project.', '', '## How To Use It', 'Read it.', ''].join('\n'),
+    ['# Demo', '', '## Resumen', 'Project.', '', '## Uso', 'Read it.', ''].join('\n'),
   );
-  run(['init', '--agent', 'generic', '--yes', '--root', root], { cwd: root });
 
-  const result = runFailure(['validate', '--root', root], { cwd: root });
-  assert.equal(result.status, 1);
-  assert.equal(result.envelope.ok, false);
-  assert.equal(result.envelope.error.code, 'validation_failed');
-  const issue = result.envelope.error.issues.find(
-    (candidate) =>
-      candidate.code === 'missing_required_section' &&
-      candidate.path === 'README.md' &&
-      candidate.type === 'readme',
-  );
-  assert.ok(issue);
-  assert.match(issue.message, /Why It Exists/);
-  assert.match(issue.hint, /## Why It Exists/);
-  assert.match(issue.hint, /docs-harness skills read document-repair/);
+  const envelope = run(['validate', '--root', root], { cwd: root });
+  assert.equal(envelope.ok, true);
+  assert.equal(envelope.data.valid, true);
 });
 
 test('validate reports hard line limit issues with repair skill hint', () => {
@@ -517,12 +514,14 @@ test('validate reports hard line limit issues with repair skill hint', () => {
   assert.match(issue.hint, /docs-harness skills read document-repair/);
 });
 
-test('validate reports description metadata drift and non-use-when descriptions', () => {
+test('validate reports description metadata drift without enforcing use-when wording', () => {
   const root = mkdtempSync(join(tmpdir(), 'docs-harness-validate-description-'));
   writeFileSync(
     join(root, 'AGENTS.md'),
     [
       '# Instructions',
+      '',
+      '## Document Graph Entries',
       '',
       '- [agent-index] name="README" description="Use when reading the project docs."',
       '',
@@ -557,11 +556,49 @@ test('validate reports description metadata drift and non-use-when descriptions'
       (issue) => issue.code === 'description_mismatch' && issue.path === 'AGENTS.md',
     ),
   );
-  assert.ok(
-    result.envelope.error.issues.some(
-      (issue) => issue.code === 'description_not_use_when' && issue.path === 'README.md',
-    ),
+  assert.equal(
+    result.envelope.error.issues.some((issue) => issue.code === 'description_not_use_when'),
+    false,
   );
+});
+
+test('validate accepts localized description wording when metadata and route match', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-validate-localized-description-'));
+  writeFileSync(
+    join(root, 'AGENTS.md'),
+    [
+      '# Instructions',
+      '',
+      '## Document Graph Entries',
+      '',
+      '- [agent-index] name="README" description="用于了解项目概览。"',
+      '',
+    ].join('\n'),
+  );
+  writeFileSync(
+    join(root, 'README.md'),
+    [
+      '---',
+      'description: 用于了解项目概览。',
+      '---',
+      '',
+      '# Demo',
+      '',
+      '## What It Is',
+      'Project.',
+      '',
+      '## Why It Exists',
+      'Context.',
+      '',
+      '## How To Use It',
+      'Read it.',
+      '',
+    ].join('\n'),
+  );
+
+  const envelope = run(['validate', '--root', root], { cwd: root });
+  assert.equal(envelope.ok, true);
+  assert.equal(envelope.data.valid, true);
 });
 
 test('validate accepts standalone complete functional entity README without a sibling route', () => {
@@ -604,7 +641,7 @@ test('validate accepts standalone complete functional entity README without a si
   assert.equal(envelope.data.valid, true);
 });
 
-test('validate reports typed docs missing sibling README and route', () => {
+test('validate does not enforce typed document sibling README and route', () => {
   const root = mkdtempSync(join(tmpdir(), 'docs-harness-validate-typed-siblings-'));
   mkdirSync(join(root, 'packages/api/docs/runbook'), { recursive: true });
   writeFileSync(
@@ -642,25 +679,9 @@ test('validate reports typed docs missing sibling README and route', () => {
     ].join('\n'),
   );
 
-  const result = runFailure(['validate', '--root', root], { cwd: root });
-  assert.equal(result.status, 1);
-  assert.equal(result.envelope.error.code, 'validation_failed');
-  assert.ok(
-    result.envelope.error.issues.some(
-      (issue) =>
-        issue.code === 'missing_sibling_readme' &&
-        issue.path === 'packages/api/docs/runbook/deploy.md' &&
-        issue.type === 'runbook',
-    ),
-  );
-  assert.ok(
-    result.envelope.error.issues.some(
-      (issue) =>
-        issue.code === 'missing_sibling_route' &&
-        issue.path === 'packages/api/docs/runbook/deploy.md' &&
-        issue.type === 'runbook',
-    ),
-  );
+  const envelope = run(['validate', '--root', root], { cwd: root });
+  assert.equal(envelope.ok, true);
+  assert.equal(envelope.data.valid, true);
 });
 
 test('graph writes readme_unindexed signal for standalone README outside reachable routes', () => {
@@ -1284,7 +1305,8 @@ test('types prefer project-local registry written by init', () => {
   assert.match(skillEnvelope.data.content, /### decision/);
   assert.match(skillEnvelope.data.content, /Purpose: Record a durable project decision\./);
   assert.match(skillEnvelope.data.content, /pathPattern: decisions\/\{name\}\.md/);
-  assert.match(skillEnvelope.data.content, /Decision \(required\)/);
+  assert.match(skillEnvelope.data.content, /Suggested sections:/);
+  assert.match(skillEnvelope.data.content, /  - Decision/);
 
   const decisionBody = ['# Deploy Strategy', '', '## Decision', 'Use feature flags.'].join('\n');
   const writeEnvelope = run(
@@ -1486,22 +1508,22 @@ test('dogfood flow writes docs, indexes them, discovers them, and validates grap
   const runbookBody = [
     '# Deploy',
     '',
-    '## When To Use',
+    '## Contexto',
     'Deploying.',
     '',
-    '## Preconditions',
+    '## Antes De Ejecutar',
     'Access.',
     '',
-    '## Steps',
+    '## Procedimiento',
     'Run deploy.',
     '',
-    '## Verification',
+    '## Verificacion',
     'Check health.',
     '',
-    '## Rollback Or Recovery',
+    '## Recuperacion',
     'Rollback.',
     '',
-    '## Entry Points',
+    '## Entradas',
     'CLI.',
   ].join('\n');
 
@@ -2237,6 +2259,46 @@ test('write rejects descriptions that cannot be encoded in agent-index attribute
   assert.equal(envelope.ok, true);
   assert.equal(envelope.data.valid, false);
   assert.ok(envelope.data.errors.some((error) => error.includes('double quotes')));
+});
+
+test('write accepts localized description wording', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-write-localized-description-'));
+  run(['init', '--agent', 'generic', '--yes', '--root', root], { cwd: root });
+  const body = [
+    '# API',
+    '',
+    '## What It Is',
+    'API package.',
+    '',
+    '## Why It Exists',
+    'Boundary.',
+    '',
+    '## How To Use It',
+    'Run it.',
+  ].join('\n');
+
+  const envelope = run(
+    [
+      'write',
+      '--type',
+      'readme',
+      '--path',
+      'packages/api',
+      '--description',
+      '用于了解 API 包。',
+      '--body',
+      body,
+      '--dry-run',
+      '--root',
+      root,
+    ],
+    { cwd: root },
+  );
+
+  assert.equal(envelope.ok, true);
+  assert.equal(envelope.data.valid, true);
+  assert.equal(envelope.data.target.description, '用于了解 API 包。');
+  assert.equal(envelope.data.routeEntry.description, '用于了解 API 包。');
 });
 
 test('write rejects duplicate route entries for the target name', () => {

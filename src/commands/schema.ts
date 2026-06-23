@@ -174,16 +174,11 @@ const COMMANDS: CommandSchema[] = [
           {
             code: [
               'description_mismatch',
-              'description_not_use_when',
               'duplicate_name',
               'hard_line_limit_exceeded',
               'missing_description',
               'missing_metadata_description',
-              'missing_metadata_name',
               'missing_name',
-              'missing_required_section',
-              'missing_sibling_readme',
-              'missing_sibling_route',
               'route_cycle',
               'target_name_duplicate',
               'target_not_found',

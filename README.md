@@ -131,12 +131,14 @@ the root, not direct parent routing.
 `validate` succeeds only when the document graph is valid. On success, it returns
 `data.valid=true`. When validation fails, the command returns `ok:false` with
 `error.code="validation_failed"` and structured `error.issues`. It checks graph
-links, duplicate names, route entry syntax, document metadata, route-description
-drift, use-when description wording, root-route reachability, route cycles,
-typed document sibling README/route prerequisites, required sections, and hard
-line limits. Each issue includes a `hint` field that should be usable by an
-agent. Blocking document graph, route, metadata, and type-contract hints may
-point to internal repair workflows such as `skills.read document-repair`.
+links, duplicate names, route entry syntax, indexed description metadata,
+route-description drift, root-route reachability, route cycles, and typed
+document hard line limits. It does not enforce typed document headings during
+validate, because existing documents may be written in different languages. Each
+issue includes a
+`hint` field that should be usable by an agent. Blocking document graph, route,
+metadata, and line-limit hints may point to internal repair workflows such as
+`skills.read document-repair`.
 
 Optimization signals in `.docs-harness/logs/<YYYY-MM-DD>/signal.jsonl`
 represent non-blocking problems found during command execution that affect
@@ -171,9 +173,10 @@ becomes:
 - [agent-index] name="packages/api/docs/runbook/deploy" description="Use when deploying the API."
 ```
 
-Document `description` is a read trigger, not a summary. Write descriptions in
-English and start them with `Use when ...`. The document metadata description is
-canonical, and route entry descriptions must match it exactly.
+Document `description` is a read trigger, not a summary. In English, prefer
+`Use when ...`; in other languages, use the equivalent task-oriented phrasing.
+The document metadata description is canonical, and route entry descriptions
+must match it exactly.
 
 Use `--dry-run` to preview both the document write and the route entry write.
 Use `--no-route-entry` only for explicit unlinked drafts or migration steps.
@@ -191,8 +194,10 @@ docs-harness types describe runbook
 ```
 
 `write` uses the selected type contract to calculate the target path, validate
-required headings and metadata, maintain the nearest ancestor route entry, and
-write only after confirmation.
+metadata, complete functional entity prerequisites, and hard line limits,
+maintain the nearest ancestor route entry, and write only after confirmation.
+Configured sections are generation guidance only; write and validate do not fail
+when headings differ, including when the document is written in another language.
 
 ```bash
 docs-harness write --type readme --path packages/api --description "Use when understanding the API package." --body @README.body.md --dry-run

@@ -1,26 +1,17 @@
 import {
   loadDocumentTypes,
-  resolveDocumentTypePath,
   type DocumentTypeDefinition,
 } from './document-types.js';
 import { type DocumentDocument, type DocumentEntry, type DocumentGraph } from './document-graph.js';
-import { isUseWhenDescription, useWhenDescriptionHint } from './descriptions.js';
-import { fileExists, resolvePath } from './files.js';
-import { parseMetadata } from './markdown.js';
 
 export type ValidationIssue = {
   code:
     | 'description_mismatch'
-    | 'description_not_use_when'
     | 'duplicate_name'
     | 'hard_line_limit_exceeded'
     | 'missing_description'
     | 'missing_metadata_description'
-    | 'missing_metadata_name'
     | 'missing_name'
-    | 'missing_required_section'
-    | 'missing_sibling_readme'
-    | 'missing_sibling_route'
     | 'route_cycle'
     | 'target_name_duplicate'
     | 'target_not_found'
@@ -137,47 +128,7 @@ async function validateDocuments(root: string, graph: DocumentGraph): Promise<Va
     const type = typeByName.get(document.target.kind);
     if (!type) continue;
 
-    issues.push(...validateDocumentAgainstType(document, type));
-    issues.push(...validateDocumentSiblings(root, document, type, graph.routeFileName));
-  }
-
-  return issues;
-}
-
-function validateDocumentSiblings(
-  root: string,
-  document: DocumentDocument,
-  type: DocumentTypeDefinition,
-  routeFileName: string,
-): ValidationIssue[] {
-  if (!type.requiresReadme && !type.requiresRoute) return [];
-
-  const types = [type];
-  const modulePath = resolveDocumentTypePath(document.path, types, routeFileName)?.modulePath;
-  if (!modulePath) return [];
-
-  const issues: ValidationIssue[] = [];
-  const readmePath = joinModulePath(modulePath, 'README.md');
-  const routePath = joinModulePath(modulePath, routeFileName);
-
-  if (type.requiresReadme && !fileExists(resolvePath(root, readmePath))) {
-    issues.push({
-      code: 'missing_sibling_readme',
-      path: document.path,
-      type: type.name,
-      message: `Document type ${type.name} requires sibling README.md at ${readmePath}.`,
-      hint: repairHint('Create or move this document under a complete functional entity that has a README before keeping it as a typed document.'),
-    });
-  }
-
-  if (type.requiresRoute && !fileExists(resolvePath(root, routePath))) {
-    issues.push({
-      code: 'missing_sibling_route',
-      path: document.path,
-      type: type.name,
-      message: `Document type ${type.name} requires sibling route at ${routePath}.`,
-      hint: repairHint('Create the complete functional entity route and index its README plus relevant typed docs, or move this content into an existing complete functional entity.'),
-    });
+    issues.push(...validateDocumentLineLimit(document, type));
   }
 
   return issues;
@@ -210,43 +161,12 @@ function validateRouteCycles(graph: DocumentGraph): ValidationIssue[] {
   }));
 }
 
-function validateDocumentAgainstType(
+function validateDocumentLineLimit(
   document: DocumentDocument,
   type: DocumentTypeDefinition,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const metadata = parseMetadata(document.content);
   const body = stripFrontmatter(document.content).trim();
-
-  if (type.requiresName && !metadata.name) {
-    issues.push({
-      code: 'missing_metadata_name',
-      path: document.path,
-      type: type.name,
-      message: `Document type ${type.name} requires metadata field: name.`,
-      hint: repairHint('Add frontmatter field `name`, or regenerate the document with `docs-harness write --dry-run`.'),
-    });
-  }
-
-  if (type.requiresDescription && !metadata.description) {
-    issues.push({
-      code: 'missing_metadata_description',
-      path: document.path,
-      type: type.name,
-      message: `Document type ${type.name} requires metadata field: description.`,
-      hint: repairHint('Add frontmatter field `description`, or regenerate the document with `docs-harness write --dry-run`.'),
-    });
-  }
-
-  if (metadata.description && !isUseWhenDescription(metadata.description)) {
-    issues.push({
-      code: 'description_not_use_when',
-      path: document.path,
-      type: type.name,
-      message: `Document description is not a use-when condition.`,
-      hint: repairHint(useWhenDescriptionHint()),
-    });
-  }
 
   const lineCount = body ? body.split('\n').length : 0;
   if (lineCount > type.hardLineLimit) {
@@ -259,18 +179,6 @@ function validateDocumentAgainstType(
     });
   }
 
-  for (const section of type.sections.filter((candidate) => candidate.required)) {
-    if (!hasHeading(body, section.heading)) {
-      issues.push({
-        code: 'missing_required_section',
-        path: document.path,
-        type: type.name,
-        message: `Document type ${type.name} requires heading: ${section.heading}.`,
-        hint: repairHint(`Add a Markdown heading \`## ${section.heading}\`.`),
-      });
-    }
-  }
-
   return issues;
 }
 
@@ -278,20 +186,11 @@ function repairHint(hint: string): string {
   return `${hint} ${DOCUMENT_REPAIR_HINT}`;
 }
 
-function joinModulePath(modulePath: string, path: string): string {
-  return modulePath === '.' ? path : `${modulePath}/${path}`;
-}
-
 function stripFrontmatter(content: string): string {
   if (!content.startsWith('---\n')) return content;
   const endIndex = content.indexOf('\n---', 4);
   if (endIndex < 0) return content;
   return content.slice(endIndex + '\n---'.length).replace(/^\n/, '');
-}
-
-function hasHeading(body: string, heading: string): boolean {
-  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^#{1,6}\\s+${escaped}\\s*$`, 'm').test(body);
 }
 
 function compareIssues(left: ValidationIssue, right: ValidationIssue): number {

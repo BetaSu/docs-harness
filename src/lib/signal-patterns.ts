@@ -67,7 +67,7 @@ const SIGNAL_PATTERNS: Record<
   },
   route_without_readme: {
     impact: 'This route has no sibling README, so agents lack complete functional entity context before choosing deeper documents.',
-    suggestion: 'If this route represents a complete functional entity, add a README with a use-when description; otherwise move its entries to the nearest complete functional entity and remove the route.',
+    suggestion: 'If this route represents a complete functional entity, add a README with a task-oriented read trigger description; otherwise move its entries to the nearest complete functional entity and remove the route.',
   },
   read_unindexed_target: {
     impact: 'The document can be read by known name but cannot be discovered from route entries.',

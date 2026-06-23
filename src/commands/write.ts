@@ -7,7 +7,6 @@ import {
   type ParsedArgs,
 } from '../lib/args.js';
 import { loadRuntimeConfig } from '../lib/config.js';
-import { isUseWhenDescription, useWhenDescriptionHint } from '../lib/descriptions.js';
 import { getDocumentType, type DocumentTypeDefinition } from '../lib/document-types.js';
 import { CliError } from '../lib/envelope.js';
 import {
@@ -250,9 +249,6 @@ async function validateWriteInput(
   if (shouldDocumentHaveMetadata(input) && !input.description) {
     errors.push(`type "${type.name}" writes a route entry and requires \`--description\`.`);
   }
-  if (shouldDocumentHaveMetadata(input) && input.description && !isUseWhenDescription(input.description)) {
-    errors.push(useWhenDescriptionHint());
-  }
   if (shouldDocumentHaveMetadata(input) && input.description.includes('"')) {
     errors.push('`--description` must not contain double quotes.');
   }
@@ -263,12 +259,6 @@ async function validateWriteInput(
   const lineCount = input.body.split('\n').length;
   if (lineCount > type.hardLineLimit) {
     errors.push(`type "${type.name}" hard line limit exceeded: ${lineCount}/${type.hardLineLimit}.`);
-  }
-
-  for (const section of type.sections.filter((section) => section.required)) {
-    if (!hasHeading(input.body, section.heading)) {
-      errors.push(`type "${type.name}" requires heading: ${section.heading}.`);
-    }
   }
 
   const runtimeConfig = await loadRuntimeConfig(root);
@@ -351,11 +341,6 @@ async function readBody(root: string, input: string): Promise<string> {
   const bodyPath = resolvePath(root, input.slice(1));
   assertInsideRoot(root, bodyPath, input);
   return readTextFile(bodyPath);
-}
-
-function hasHeading(body: string, heading: string): boolean {
-  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^#{1,6}\\s+${escaped}\\s*$`, 'm').test(body);
 }
 
 function normalizeBody(body: string): string {
