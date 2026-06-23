@@ -25,9 +25,9 @@ export function assertInsideRoot(root: string, absolutePath: string, input: stri
   }
 
   throw new CliError({
-    type: 'validation',
+    code: 'path_outside_root',
     message: `Path must be inside the project root: ${input}.`,
-    hint: 'Pass a path inside this project or use --root <path>.',
+    hint: 'Pass a path inside this project or use `--root <path>`.',
   });
 }
 

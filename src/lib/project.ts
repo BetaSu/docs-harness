@@ -6,10 +6,11 @@ import { getStringFlag } from './args.js';
 
 export const HARNESS_DIRECTORY = '.docs-harness';
 export const CONFIG_FILE = 'config.json';
+export const LOGS_DIRECTORY = 'logs';
 export const REGISTRY_DIRECTORY = 'registry';
 export const DOCUMENT_TYPES_FILE = 'document-types.json';
 
-export type AgentKind = 'claude' | 'codex';
+export type AgentKind = 'claude' | 'generic';
 
 export type HarnessConfig = {
   version: 1;
@@ -41,6 +42,10 @@ export function getConfigPath(root: string): string {
 
 export function getRegistryDirectory(root: string): string {
   return join(getHarnessDirectory(root), REGISTRY_DIRECTORY);
+}
+
+export function getLogsDirectory(root: string): string {
+  return join(getHarnessDirectory(root), LOGS_DIRECTORY);
 }
 
 export function getDocumentTypesPath(root: string): string {

@@ -1,5 +1,6 @@
 node_modules/
 dist/
 coverage/
+.pack/
 *.tgz
 .DS_Store

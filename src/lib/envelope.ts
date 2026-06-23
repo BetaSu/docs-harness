@@ -6,26 +6,35 @@ export type SuccessEnvelope<T> = {
 export type FailureEnvelope = {
   ok: false;
   error: {
-    type: string;
+    code: string;
     message: string;
     hint?: string;
     confirm?: string;
+    issues?: Array<Record<string, unknown>>;
   };
 };
 
 export type Envelope<T> = SuccessEnvelope<T> | FailureEnvelope;
 
 export class CliError extends Error {
-  readonly type: string;
+  readonly code: string;
   readonly hint?: string;
   readonly confirm?: string;
+  readonly issues?: Array<Record<string, unknown>>;
 
-  constructor(input: { type: string; message: string; hint?: string; confirm?: string }) {
+  constructor(input: {
+    code: string;
+    message: string;
+    hint?: string;
+    confirm?: string;
+    issues?: Array<Record<string, unknown>>;
+  }) {
     super(input.message);
     this.name = 'CliError';
-    this.type = input.type;
+    this.code = input.code;
     this.hint = input.hint;
     this.confirm = input.confirm;
+    this.issues = input.issues;
   }
 }
 
@@ -38,10 +47,11 @@ export function writeFailure(error: unknown): void {
     writeEnvelope({
       ok: false,
       error: {
-        type: error.type,
+        code: error.code,
         message: error.message,
         ...(error.hint ? { hint: error.hint } : {}),
         ...(error.confirm ? { confirm: error.confirm } : {}),
+        ...(error.issues ? { issues: error.issues } : {}),
       },
     });
     return;
@@ -51,9 +61,9 @@ export function writeFailure(error: unknown): void {
   writeEnvelope({
     ok: false,
     error: {
-      type: 'runtime',
+      code: 'runtime_error',
       message,
-      hint: 'Retry the command or run docs-harness skills read core.',
+      hint: 'Retry the command or run `docs-harness skills read agent-init`.',
     },
   });
 }

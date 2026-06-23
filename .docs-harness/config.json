@@ -1,5 +1,5 @@
 {
   "version": 1,
-  "agent": "codex",
+  "agent": "generic",
   "instructionFile": "AGENTS.md"
 }

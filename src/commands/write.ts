@@ -7,6 +7,7 @@ import {
   type ParsedArgs,
 } from '../lib/args.js';
 import { loadRuntimeConfig } from '../lib/config.js';
+import { isUseWhenDescription, useWhenDescriptionHint } from '../lib/descriptions.js';
 import { getDocumentType, type DocumentTypeDefinition } from '../lib/document-types.js';
 import { CliError } from '../lib/envelope.js';
 import {
@@ -72,17 +73,17 @@ export async function commandWrite(root: string, args: ParsedArgs): Promise<Writ
 
   if (!plan.data.valid && !dryRun) {
     throw new CliError({
-      type: 'validation',
+      code: 'write_validation_failed',
       message: 'Document body does not satisfy the type contract.',
-      hint: plan.data.errors[0] ?? 'Run docs-harness types describe <type>.',
+      hint: `${plan.data.errors[0] ?? 'Run `docs-harness types describe <type>`.'} For repair workflow, run \`docs-harness skills read document-repair\`.`,
     });
   }
 
   if (!dryRun && !yes && plan.data.changes.some((change) => change.action !== 'noop')) {
     throw new CliError({
-      type: 'confirmation_required',
+      code: 'confirmation_required',
       message: 'write would update project files.',
-      hint: 'Review docs-harness write --dry-run, then retry with --yes.',
+      hint: 'Review `docs-harness write --dry-run`, then retry with `--yes`.',
       confirm: '--yes',
     });
   }
@@ -108,6 +109,7 @@ async function parseWriteInput(
   name: string;
   targetPath: string;
   targetName: string;
+  topicPath: string;
   type: DocumentTypeDefinition;
   routeEntryEnabled: boolean;
   routeFileName: string;
@@ -116,9 +118,9 @@ async function parseWriteInput(
   const type = typeName ? await getDocumentType(root, typeName) : undefined;
   if (!type) {
     throw new CliError({
-      type: 'validation',
+      code: 'document_type_not_found',
       message: `Missing or unknown document type: ${typeName || '<missing>'}.`,
-      hint: 'Run docs-harness types list.',
+      hint: 'Run `docs-harness types list`.',
     });
   }
 
@@ -145,6 +147,7 @@ async function parseWriteInput(
     name,
     targetName,
     targetPath,
+    topicPath,
     type,
     routeEntryEnabled,
     routeFileName: runtimeConfig.instructionFileName,
@@ -162,6 +165,7 @@ async function buildWritePlan(
     routeFileName: string;
     targetPath: string;
     targetName: string;
+    topicPath: string;
     type: DocumentTypeDefinition;
   },
   dryRun: boolean,
@@ -228,28 +232,32 @@ async function validateWriteInput(
     routeEntryEnabled: boolean;
     routeFileName: string;
     targetPath: string;
+    topicPath: string;
     type: DocumentTypeDefinition;
   },
 ): Promise<string[]> {
   const errors: string[] = [];
   const { type } = input;
 
-  if (!input.body) errors.push('--body is required.');
-  if (type.requiresName && !input.name) errors.push(`type "${type.name}" requires --name.`);
+  if (!input.body) errors.push('`--body` is required.');
+  if (type.requiresName && !input.name) errors.push(`type "${type.name}" requires \`--name\`.`);
   if (type.requiresName && input.name && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.name)) {
-    errors.push('--name must be kebab-case.');
+    errors.push('`--name` must be kebab-case.');
   }
   if (type.requiresDescription && !input.description) {
-    errors.push(`type "${type.name}" requires --description.`);
+    errors.push(`type "${type.name}" requires \`--description\`.`);
   }
   if (shouldDocumentHaveMetadata(input) && !input.description) {
-    errors.push(`type "${type.name}" writes a route entry and requires --description.`);
+    errors.push(`type "${type.name}" writes a route entry and requires \`--description\`.`);
+  }
+  if (shouldDocumentHaveMetadata(input) && input.description && !isUseWhenDescription(input.description)) {
+    errors.push(useWhenDescriptionHint());
   }
   if (shouldDocumentHaveMetadata(input) && input.description.includes('"')) {
-    errors.push('--description must not contain double quotes.');
+    errors.push('`--description` must not contain double quotes.');
   }
   if (/^---\n/.test(input.body.trimStart())) {
-    errors.push('--body must not include frontmatter; docs-harness writes metadata.');
+    errors.push('`--body` must not include frontmatter; docs-harness writes metadata.');
   }
 
   const lineCount = input.body.split('\n').length;
@@ -263,16 +271,17 @@ async function validateWriteInput(
     }
   }
 
-  const topicPath = dirname(input.targetPath).replace(/\/docs\/[^/]+$/, '') || '.';
   const runtimeConfig = await loadRuntimeConfig(root);
-  if (type.requiresReadme && !fileExists(resolvePath(root, joinTopicPath(topicPath, 'README.md')))) {
-    errors.push(`type "${type.name}" requires sibling README.md.`);
+  if (type.requiresReadme && !fileExists(resolvePath(root, joinTopicPath(input.topicPath, 'README.md')))) {
+    errors.push(`type "${type.name}" requires a sibling README.md for the complete functional entity.`);
   }
   if (
     type.requiresRoute &&
-    !fileExists(resolvePath(root, joinTopicPath(topicPath, runtimeConfig.instructionFileName)))
+    !fileExists(resolvePath(root, joinTopicPath(input.topicPath, runtimeConfig.instructionFileName)))
   ) {
-    errors.push(`type "${type.name}" requires sibling ${runtimeConfig.instructionFileName}.`);
+    errors.push(
+      `type "${type.name}" requires a sibling ${runtimeConfig.instructionFileName} for the complete functional entity.`,
+    );
   }
 
   return errors;
@@ -294,9 +303,9 @@ function resolveTopicPath(root: string, rawPath: string): string {
   assertInsideRoot(root, absolutePath, rawPath || '.');
   if (fileExists(absolutePath) && !isDirectory(absolutePath)) {
     throw new CliError({
-      type: 'validation',
-      message: `--path must be a directory: ${rawPath}.`,
-      hint: 'Pass a directory path for the documentation subject.',
+      code: 'path_not_directory',
+      message: `\`--path\` must be a directory: ${rawPath}.`,
+      hint: 'Pass a directory path for the complete functional entity.',
     });
   }
   return toProjectPath(root, absolutePath);
@@ -358,6 +367,7 @@ function joinTopicPath(topicPath: string, path: string): string {
 }
 
 function shouldDocumentHaveMetadata(input: {
+  description?: string;
   routeEntryEnabled: boolean;
   routeFileName: string;
   targetPath: string;
@@ -366,6 +376,7 @@ function shouldDocumentHaveMetadata(input: {
   return (
     input.type.requiresDescription ||
     input.type.requiresName ||
+    Boolean(input.description) ||
     shouldWriteRouteEntryMetadata({
       enabled: input.routeEntryEnabled,
       routeFileName: input.routeFileName,

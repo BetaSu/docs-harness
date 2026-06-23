@@ -55,9 +55,9 @@ export function requireNoUnknownFlags(args: ParsedArgs, allowed: string[]): void
   if (unknown.length === 0) return;
 
   throw new CliError({
-    type: 'validation',
-    message: `Unknown flag: --${unknown[0]}.`,
-    hint: 'Run docs-harness schema.',
+    code: 'unknown_flag',
+    message: `Unknown flag: \`--${unknown[0]}\`.`,
+    hint: 'Run `docs-harness schema`.',
   });
 }
 
@@ -67,10 +67,15 @@ function expectsValue(key: string): boolean {
     'body',
     'command',
     'description',
+    'dedupe',
     'file',
+    'intent',
+    'limit',
     'name',
     'path',
     'root',
+    'since',
+    'until',
     'type',
   ]).has(key);
 }

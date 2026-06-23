@@ -1,7 +1,7 @@
 {
   "name": "docs-harness",
   "version": "0.1.0",
-  "description": "Agent-first project document graph CLI.",
+  "description": "Agent native project document graph CLI.",
   "type": "module",
   "bin": {
     "docs-harness": "./dist/cli.js"
@@ -19,6 +19,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
+    "install:local": "node scripts/package-local.mjs --install-global",
+    "package:local": "node scripts/package-local.mjs",
     "prepack": "npm run clean && npm run build",
     "test": "npm run build && node --test test/*.test.js"
   },

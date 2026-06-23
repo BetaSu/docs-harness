@@ -27,17 +27,17 @@ export async function commandTypes(
     const type = await getDocumentType(root, typeName);
     if (!type) {
       throw new CliError({
-        type: 'not_found',
+        code: 'document_type_not_found',
         message: `Document type not found: ${typeName || '<missing>'}.`,
-        hint: 'Run docs-harness types list.',
+        hint: 'Run `docs-harness types list`.',
       });
     }
     return { type };
   }
 
   throw new CliError({
-    type: 'validation',
+    code: 'unknown_types_action',
     message: `Unknown types action: ${action}.`,
-    hint: 'Run docs-harness types list or docs-harness types describe <type>.',
+    hint: 'Run `docs-harness types list` or `docs-harness types describe <type>`.',
   });
 }

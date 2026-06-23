@@ -1,10 +1,17 @@
-import { loadDocumentTypes, type DocumentTypeDefinition } from './document-types.js';
+import {
+  loadDocumentTypes,
+  resolveDocumentTypePath,
+  type DocumentTypeDefinition,
+} from './document-types.js';
 import { type DocumentDocument, type DocumentEntry, type DocumentGraph } from './document-graph.js';
+import { isUseWhenDescription, useWhenDescriptionHint } from './descriptions.js';
 import { fileExists, resolvePath } from './files.js';
 import { parseMetadata } from './markdown.js';
 
 export type ValidationIssue = {
   code:
+    | 'description_mismatch'
+    | 'description_not_use_when'
     | 'duplicate_name'
     | 'hard_line_limit_exceeded'
     | 'missing_description'
@@ -12,10 +19,12 @@ export type ValidationIssue = {
     | 'missing_metadata_name'
     | 'missing_name'
     | 'missing_required_section'
+    | 'missing_sibling_readme'
     | 'missing_sibling_route'
+    | 'route_cycle'
     | 'target_name_duplicate'
     | 'target_not_found'
-    | 'unknown_document_type';
+    | 'unreachable_route';
   hint: string;
   message: string;
   path: string;
@@ -23,6 +32,8 @@ export type ValidationIssue = {
   name?: string;
   type?: string;
 };
+
+const DOCUMENT_REPAIR_HINT = 'For repair workflow, run `docs-harness skills read document-repair`.';
 
 export async function validateDocumentGraph(
   root: string,
@@ -36,7 +47,7 @@ export async function validateDocumentGraph(
       path: paths[0] ?? '.',
       name,
       message: `Document name is duplicated: ${name}.`,
-      hint: `Make document metadata names unique. Conflicting paths: ${paths.join(', ')}.`,
+      hint: repairHint(`Make document metadata names unique. Conflicting paths: ${paths.map((path) => `\`${path}\``).join(', ')}.`),
     });
   }
 
@@ -45,23 +56,24 @@ export async function validateDocumentGraph(
   }
 
   issues.push(...(await validateDocuments(root, graph)));
+  issues.push(...validateRouteReachability(graph));
+  issues.push(...validateRouteCycles(graph));
   return issues.sort(compareIssues);
 }
 
 function validateEntry(entry: DocumentEntry): ValidationIssue[] {
-  return entry.errors.map((error) => {
-    const base = {
-      line: entry.line,
-      name: entry.name || undefined,
-      path: entry.source,
-    };
-
+  const base = {
+    line: entry.line,
+    name: entry.name || undefined,
+    path: entry.source,
+  };
+  const issues: ValidationIssue[] = entry.errors.map((error) => {
     if (error === 'missing_name') {
       return {
         ...base,
         code: 'missing_name' as const,
         message: 'Agent-index entry is missing name.',
-        hint: 'Add name="<stable-document-name>" to this agent-index entry.',
+        hint: repairHint('Add `name="<stable-document-name>"` to this `agent-index` entry.'),
       };
     }
 
@@ -70,7 +82,7 @@ function validateEntry(entry: DocumentEntry): ValidationIssue[] {
         ...base,
         code: 'missing_description' as const,
         message: 'Agent-index entry is missing description.',
-        hint: 'Add description="<when an agent should read this document>" to this entry.',
+        hint: repairHint('Add `description="<when an agent should read this document>"` to this entry.'),
       };
     }
 
@@ -79,7 +91,7 @@ function validateEntry(entry: DocumentEntry): ValidationIssue[] {
         ...base,
         code: 'target_not_found' as const,
         message: `Agent-index target was not found: ${entry.name || '<missing>'}.`,
-        hint: 'Create the target document with docs-harness write --dry-run, or fix the entry name.',
+        hint: repairHint('Create the target document with `docs-harness write --dry-run`, or fix the entry name.'),
       };
     }
 
@@ -87,9 +99,31 @@ function validateEntry(entry: DocumentEntry): ValidationIssue[] {
       ...base,
       code: 'target_name_duplicate' as const,
       message: `Agent-index target name is duplicated: ${entry.name || '<missing>'}.`,
-      hint: 'Make target document names unique, then rerun docs-harness validate.',
+      hint: repairHint('Make target document names unique, then rerun `docs-harness validate`.'),
     };
   });
+
+  if (entry.target && entry.description) {
+    if (!entry.target.description) {
+      issues.push({
+        code: 'missing_metadata_description',
+        path: entry.target.path,
+        name: entry.target.name,
+        type: entry.target.kind,
+        message: `Indexed document is missing metadata field: description.`,
+        hint: repairHint('Add frontmatter field `description` that matches the route entry.'),
+      });
+    } else if (entry.description !== entry.target.description) {
+      issues.push({
+        ...base,
+        code: 'description_mismatch',
+        message: `Agent-index description does not match target metadata for: ${entry.name}.`,
+        hint: repairHint('Update the route entry description or regenerate it with `docs-harness write --dry-run`.'),
+      });
+    }
+  }
+
+  return issues;
 }
 
 async function validateDocuments(root: string, graph: DocumentGraph): Promise<ValidationIssue[]> {
@@ -98,63 +132,82 @@ async function validateDocuments(root: string, graph: DocumentGraph): Promise<Va
   const typeByName = new Map(types.map((type) => [type.name, type]));
 
   for (const document of graph.documents) {
-    issues.push(...validateSiblingRoute(root, graph, document));
+    if (!document.isTarget) continue;
 
-    const type = resolveDocumentType(document, graph.routeFileName, typeByName);
-    if (!type) {
-      if (isTypedDocsPath(document.path)) {
-        issues.push({
-          code: 'unknown_document_type',
-          path: document.path,
-          type: document.target.kind,
-          message: `Document path uses unknown document type: ${document.target.kind}.`,
-          hint: 'Add this type to .docs-harness/registry/document-types.json or move the document under a known docs/<type>/ path.',
-        });
-      }
-      continue;
-    }
+    const type = typeByName.get(document.target.kind);
+    if (!type) continue;
 
     issues.push(...validateDocumentAgainstType(document, type));
+    issues.push(...validateDocumentSiblings(root, document, type, graph.routeFileName));
   }
 
   return issues;
 }
 
-function validateSiblingRoute(
+function validateDocumentSiblings(
   root: string,
-  graph: DocumentGraph,
   document: DocumentDocument,
+  type: DocumentTypeDefinition,
+  routeFileName: string,
 ): ValidationIssue[] {
-  if (!document.path.endsWith('/README.md')) return [];
+  if (!type.requiresReadme && !type.requiresRoute) return [];
 
-  const routePath = `${document.path.slice(0, -'README.md'.length)}${graph.routeFileName}`;
-  if (fileExists(resolvePath(root, routePath))) return [];
+  const types = [type];
+  const modulePath = resolveDocumentTypePath(document.path, types, routeFileName)?.modulePath;
+  if (!modulePath) return [];
 
-  return [
-    {
+  const issues: ValidationIssue[] = [];
+  const readmePath = joinModulePath(modulePath, 'README.md');
+  const routePath = joinModulePath(modulePath, routeFileName);
+
+  if (type.requiresReadme && !fileExists(resolvePath(root, readmePath))) {
+    issues.push({
+      code: 'missing_sibling_readme',
+      path: document.path,
+      type: type.name,
+      message: `Document type ${type.name} requires sibling README.md at ${readmePath}.`,
+      hint: repairHint('Create or move this document under a complete functional entity that has a README before keeping it as a typed document.'),
+    });
+  }
+
+  if (type.requiresRoute && !fileExists(resolvePath(root, routePath))) {
+    issues.push({
       code: 'missing_sibling_route',
       path: document.path,
-      message: `README document is missing sibling route: ${routePath}.`,
-      hint: `Create the sibling route with docs-harness write --type route --path ${document.path.slice(
-        0,
-        -'/README.md'.length,
-      )} --dry-run, then retry with --yes after review.`,
-    },
-  ];
+      type: type.name,
+      message: `Document type ${type.name} requires sibling route at ${routePath}.`,
+      hint: repairHint('Create the complete functional entity route and index its README plus relevant typed docs, or move this content into an existing complete functional entity.'),
+    });
+  }
+
+  return issues;
 }
 
-function resolveDocumentType(
-  document: DocumentDocument,
-  routeFileName: string,
-  typeByName: Map<string, DocumentTypeDefinition>,
-): DocumentTypeDefinition | undefined {
-  if (document.path === routeFileName || document.path.endsWith(`/${routeFileName}`)) {
-    return typeByName.get('route');
-  }
-  if (document.path === 'README.md' || document.path.endsWith('/README.md')) {
-    return typeByName.get('readme');
-  }
-  return typeByName.get(document.target.kind);
+function validateRouteReachability(graph: DocumentGraph): ValidationIssue[] {
+  return graph.targets
+    .filter(
+      (target) =>
+        target.kind === 'route' &&
+        target.path !== graph.routeFileName &&
+        !graph.reachableRoutePaths.has(target.path),
+    )
+    .map((target) => ({
+      code: 'unreachable_route' as const,
+      path: target.path,
+      name: target.name,
+      type: target.kind,
+      message: `Route document is not reachable from root ${graph.routeFileName}: ${target.path}.`,
+      hint: repairHint(`Add an \`agent-index\` entry from \`${graph.routeFileName}\` or another reachable route to \`${target.name}\`, or remove the stale route.`),
+    }));
+}
+
+function validateRouteCycles(graph: DocumentGraph): ValidationIssue[] {
+  return graph.routeCycles.map((cycle) => ({
+    code: 'route_cycle' as const,
+    path: cycle.paths[0] ?? graph.routeFileName,
+    message: `Route cycle detected: ${cycle.paths.join(' -> ')}.`,
+    hint: repairHint('Remove or redirect one route-to-route entry so route discovery cannot return to an already visited route.'),
+  }));
 }
 
 function validateDocumentAgainstType(
@@ -171,7 +224,7 @@ function validateDocumentAgainstType(
       path: document.path,
       type: type.name,
       message: `Document type ${type.name} requires metadata field: name.`,
-      hint: 'Add frontmatter field `name`, or regenerate the document with docs-harness write --dry-run.',
+      hint: repairHint('Add frontmatter field `name`, or regenerate the document with `docs-harness write --dry-run`.'),
     });
   }
 
@@ -181,7 +234,17 @@ function validateDocumentAgainstType(
       path: document.path,
       type: type.name,
       message: `Document type ${type.name} requires metadata field: description.`,
-      hint: 'Add frontmatter field `description`, or regenerate the document with docs-harness write --dry-run.',
+      hint: repairHint('Add frontmatter field `description`, or regenerate the document with `docs-harness write --dry-run`.'),
+    });
+  }
+
+  if (metadata.description && !isUseWhenDescription(metadata.description)) {
+    issues.push({
+      code: 'description_not_use_when',
+      path: document.path,
+      type: type.name,
+      message: `Document description is not a use-when condition.`,
+      hint: repairHint(useWhenDescriptionHint()),
     });
   }
 
@@ -192,7 +255,7 @@ function validateDocumentAgainstType(
       path: document.path,
       type: type.name,
       message: `Document type ${type.name} hard line limit exceeded: ${lineCount}/${type.hardLineLimit}.`,
-      hint: 'Shorten or split this document. For the repair workflow, run docs-harness skills read document-repair.',
+      hint: repairHint('Shorten or split this document.'),
     });
   }
 
@@ -203,12 +266,20 @@ function validateDocumentAgainstType(
         path: document.path,
         type: type.name,
         message: `Document type ${type.name} requires heading: ${section.heading}.`,
-        hint: `Add a Markdown heading \`## ${section.heading}\`, or run docs-harness skills read document-repair for the repair workflow.`,
+        hint: repairHint(`Add a Markdown heading \`## ${section.heading}\`.`),
       });
     }
   }
 
   return issues;
+}
+
+function repairHint(hint: string): string {
+  return `${hint} ${DOCUMENT_REPAIR_HINT}`;
+}
+
+function joinModulePath(modulePath: string, path: string): string {
+  return modulePath === '.' ? path : `${modulePath}/${path}`;
 }
 
 function stripFrontmatter(content: string): string {
@@ -221,10 +292,6 @@ function stripFrontmatter(content: string): string {
 function hasHeading(body: string, heading: string): boolean {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`^#{1,6}\\s+${escaped}\\s*$`, 'm').test(body);
-}
-
-function isTypedDocsPath(path: string): boolean {
-  return path.split('/').includes('docs') && !path.endsWith('/README.md');
 }
 
 function compareIssues(left: ValidationIssue, right: ValidationIssue): number {

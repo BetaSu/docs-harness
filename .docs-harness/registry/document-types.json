@@ -16,23 +16,23 @@
       "hardLineLimit": 250,
       "sections": [
         {
-          "heading": "范围",
+          "heading": "Scope",
           "required": true
         },
         {
-          "heading": "结构",
+          "heading": "Structure",
           "required": true
         },
         {
-          "heading": "数据流或控制流",
+          "heading": "Data Or Control Flow",
           "required": true
         },
         {
-          "heading": "边界与依赖",
+          "heading": "Boundaries And Dependencies",
           "required": true
         },
         {
-          "heading": "入口",
+          "heading": "Entry Points",
           "required": true
         }
       ]
@@ -53,29 +53,29 @@
       "hardLineLimit": 180,
       "sections": [
         {
-          "heading": "必须遵守",
+          "heading": "Must Follow",
           "required": true
         },
         {
-          "heading": "边界",
+          "heading": "Boundaries",
           "required": true
         },
         {
-          "heading": "常见风险",
+          "heading": "Common Risks",
           "required": true
         },
         {
-          "heading": "入口",
+          "heading": "Entry Points",
           "required": true
         }
       ]
     },
     {
       "name": "readme",
-      "purpose": "Explain what a project, package, or directory is and how to use it.",
+      "purpose": "Explain what a complete functional entity is and how to use it.",
       "useWhen": [
-        "A directory needs a concise overview for humans and agents.",
-        "A topic needs enough context to decide which deeper documents to read."
+        "A complete functional entity needs a concise overview for humans and agents.",
+        "A complete functional entity needs enough context to decide which deeper documents to read."
       ],
       "pathPattern": "README.md",
       "requiresName": false,
@@ -104,44 +104,11 @@
       ]
     },
     {
-      "name": "research",
-      "purpose": "Record investigation findings that inform future CLI design decisions.",
-      "useWhen": [
-        "A future change needs the research context behind a docs-harness design decision.",
-        "An agent is revisiting init, agent-file generation, or similar exploratory design work."
-      ],
-      "pathPattern": "docs/{type}/{name}.md",
-      "requiresName": false,
-      "requiresDescription": false,
-      "requiresReadme": false,
-      "requiresRoute": false,
-      "softLineLimit": 120,
-      "hardLineLimit": 180,
-      "sections": [
-        {
-          "heading": "Goal",
-          "required": true
-        },
-        {
-          "heading": "Source Findings",
-          "required": true
-        },
-        {
-          "heading": "Design Implications",
-          "required": true
-        },
-        {
-          "heading": "Open Questions",
-          "required": true
-        }
-      ]
-    },
-    {
       "name": "route",
-      "purpose": "Expose the document graph entries for a directory and its children.",
+      "purpose": "Expose the document graph entries for a complete functional entity and its children.",
       "useWhen": [
-        "A directory becomes a documentation subject with its own README or docs directory.",
-        "Agents need path-scoped document discovery below this directory."
+        "A complete functional entity needs its own README or docs directory.",
+        "Agents need path-scoped document discovery below this complete functional entity."
       ],
       "pathPattern": "{instructionFile}",
       "requiresName": false,
@@ -152,7 +119,7 @@
       "hardLineLimit": 120,
       "sections": [
         {
-          "heading": "文档图入口",
+          "heading": "Document Graph Entries",
           "required": true
         }
       ]
@@ -173,27 +140,27 @@
       "hardLineLimit": 300,
       "sections": [
         {
-          "heading": "适用场景",
+          "heading": "When To Use",
           "required": true
         },
         {
-          "heading": "前置条件",
+          "heading": "Preconditions",
           "required": true
         },
         {
-          "heading": "步骤",
+          "heading": "Steps",
           "required": true
         },
         {
-          "heading": "验证",
+          "heading": "Verification",
           "required": true
         },
         {
-          "heading": "回滚或恢复",
+          "heading": "Rollback Or Recovery",
           "required": true
         },
         {
-          "heading": "入口",
+          "heading": "Entry Points",
           "required": true
         }
       ]
