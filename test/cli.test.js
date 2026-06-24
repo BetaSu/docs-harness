@@ -277,7 +277,7 @@ test('schema is the default machine-readable command contract', () => {
   assert.equal(versionSchema.data.command.output.version, 'string');
   const versionEnvelope = run(['version'], { cwd: process.cwd() });
   assert.equal(versionEnvelope.ok, true);
-  assert.equal(versionEnvelope.data.version, '0.1.0');
+  assert.equal(versionEnvelope.data.version, '0.2.0');
 
   const validateEnvelope = run(['schema', '--command', 'validate'], { cwd: process.cwd() });
   assert.equal(validateEnvelope.ok, true);
@@ -974,7 +974,10 @@ test('init writes CLAUDE.md and configures future route lookup', () => {
   assert.match(routeContent, /docs-harness insight/);
   assert.match(routeContent, /docs-harness insight \[path\] --intent/);
   assert.match(routeContent, /docs-harness read <name> --intent/);
-  assert.match(routeContent, /## How To Add Or Update Docs/);
+  assert.match(routeContent, /## When To Read Docs/);
+  assert.match(routeContent, /When starting work in a project area/);
+  assert.match(routeContent, /## When To Maintain Docs/);
+  assert.match(routeContent, /maintain the affected docs in the same task/);
   assert.match(routeContent, /docs-harness types list/);
   assert.match(routeContent, /docs-harness write --type <type> .* --dry-run/);
   assert.match(routeContent, /docs-harness write --type <type> .* --yes/);
@@ -1009,7 +1012,7 @@ test('commands write deduplicated optimization signals discovered during executi
     () => readSignals(root).find((signal) => signal.frictionPattern === 'route_fallback'),
     'route_fallback signal',
   );
-  assert.equal(fallbackSignal.version, '0.1.0');
+  assert.equal(fallbackSignal.version, '0.2.0');
   assert.equal(fallbackSignal.handled, false);
   assert.equal(fallbackSignal.target.kind, 'module');
   assert.equal(fallbackSignal.target.path, 'packages/api/src');

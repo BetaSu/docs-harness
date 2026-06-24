@@ -158,15 +158,15 @@ function buildManagedBlock(
       : "<!-- Add document graph entries here as docs are created. -->";
 
   return `${START_MARKER}
-## How To Find Relevant Docs
+## When To Read Docs
 
-When entering any path, run this to discover relevant docs for that path and its children:
+When starting work in a project area, entering a directory, modifying files, debugging behavior, or answering questions about a feature, discover relevant docs first:
 
 \`\`\`bash
 docs-harness insight [path] --intent "<why you need docs for this task>"
 \`\`\`
 
-When you need the full document content, run:
+When a returned index entry matches your task, or when you need authoritative details before changing code or docs, read it by name:
 
 \`\`\`bash
 docs-harness read <name> --intent "<why you need this document>"
@@ -179,9 +179,11 @@ Lines shaped as \`- [agent-index] name="<name>" description="<description>"\` ar
 - \`description\` explains when the document should be read; use "Use when ..." in English or an equivalent phrase in the document language
 - \`name\` is the stable identifier of the target document
 
-## How To Add Or Update Docs
+## When To Maintain Docs
 
-When adding or updating project docs, list available document types first:
+When project code, requirements, configuration, workflows, or docs change, maintain the affected docs in the same task.
+
+Before creating or updating docs, list available document types:
 
 \`\`\`bash
 docs-harness types list
@@ -193,7 +195,7 @@ Preview the typed document write first:
 docs-harness write --type <type> --path <path> --name <name> --description "Use when ..." --body @body.md --dry-run
 \`\`\`
 
-If the planned document and route-entry changes look correct, apply them:
+If the planned document and route-entry changes match the actual project change, apply them:
 
 \`\`\`bash
 docs-harness write --type <type> --path <path> --name <name> --description "Use when ..." --body @body.md --yes
