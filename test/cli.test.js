@@ -126,11 +126,15 @@ test('skills list returns compact success envelope by default', () => {
   assert.equal(coreEnvelope.ok, true);
   assert.match(coreEnvelope.data.content, /# docs-harness Agent Init/);
   assert.match(coreEnvelope.data.content, /Agent Init Flow/);
-  assert.match(coreEnvelope.data.content, /docs-harness init --dry-run/);
-  assert.match(coreEnvelope.data.content, /docs-harness init --yes/);
+  assert.match(coreEnvelope.data.content, /runtime identity/);
+  assert.match(coreEnvelope.data.content, /docs-harness init --agent <agent> --dry-run/);
+  assert.match(coreEnvelope.data.content, /data\.impact/);
+  assert.match(coreEnvelope.data.content, /docs-harness init --agent <agent> --yes/);
   assert.match(coreEnvelope.data.content, /docs-harness validate/);
   assert.match(coreEnvelope.data.content, /docs-harness skills read document-repair/);
   assert.match(coreEnvelope.data.content, /docs-harness skills read schedule-document-quality-maintenance/);
+  assert.match(coreEnvelope.data.content, /keep project documents synchronized with the actual project/);
+  assert.match(coreEnvelope.data.content, /goals, loops, scheduled tasks, monitors, or automations/);
   assert.doesNotMatch(coreEnvelope.data.content, /## Current Document Type Contracts/);
 
   const maintenanceEnvelope = run(['skills', 'read', 'schedule-document-quality-maintenance'], {
@@ -157,6 +161,8 @@ test('skills list returns compact success envelope by default', () => {
   assert.match(repairEnvelope.data.content, /  - Steps/);
   assert.match(repairEnvelope.data.content, /Treat sections as writing guidance only/);
   assert.match(repairEnvelope.data.content, /For English descriptions, use the form "Use when \.\.\."/);
+  assert.match(repairEnvelope.data.content, /\.docs-harness\/config\.json/);
+  assert.match(repairEnvelope.data.content, /remove or narrow the matching `ignore` pattern/);
 
   const signalRepairEnvelope = run(['skills', 'read', 'signal-repair'], { cwd: process.cwd() });
   assert.equal(signalRepairEnvelope.ok, true);
@@ -227,6 +233,11 @@ test('schema is the default machine-readable command contract', () => {
 
   const internalEnvelope = run(['schema', '--internal'], { cwd: process.cwd() });
   assert.equal(internalEnvelope.ok, true);
+  assert.equal(
+    defaultEnvelope.data.commands.some((command) => command.id === 'version'),
+    false,
+  );
+  assert.ok(internalEnvelope.data.commands.some((command) => command.id === 'version'));
   assert.ok(internalEnvelope.data.commands.some((command) => command.id === 'intent.list'));
   assert.ok(internalEnvelope.data.commands.some((command) => command.id === 'signal.list'));
   assert.ok(internalEnvelope.data.commands.some((command) => command.id === 'signal.mark-handled'));
@@ -252,6 +263,21 @@ test('schema is the default machine-readable command contract', () => {
   );
   const agentArg = initEnvelope.data.command.args.find((arg) => arg.name === 'agent');
   assert.deepEqual(agentArg.values, ['generic', 'claude']);
+  assert.equal(initEnvelope.data.command.output.success.impact.managedMarkdownCount, 'number');
+  assert.equal(initEnvelope.data.command.output.success.impact.managedMarkdown[0].path, 'string');
+  assert.equal(initEnvelope.data.command.output.success.impact.skipCandidates[0].path, 'string');
+  assert.equal(
+    initEnvelope.data.command.output.success.impact.defaultSkippedMarkdown[0].path,
+    'string',
+  );
+
+  const versionSchema = run(['schema', '--command', 'version'], { cwd: process.cwd() });
+  assert.equal(versionSchema.ok, true);
+  assert.equal(versionSchema.data.command.visibility, 'internal');
+  assert.equal(versionSchema.data.command.output.version, 'string');
+  const versionEnvelope = run(['version'], { cwd: process.cwd() });
+  assert.equal(versionEnvelope.ok, true);
+  assert.equal(versionEnvelope.data.version, '0.1.0');
 
   const validateEnvelope = run(['schema', '--command', 'validate'], { cwd: process.cwd() });
   assert.equal(validateEnvelope.ok, true);
@@ -886,11 +912,46 @@ test('validate reports route-to-route cycles', () => {
 test('init previews AGENTS.md setup without writing', () => {
   const root = mkdtempSync(join(tmpdir(), 'docs-harness-init-'));
   writeFileSync(join(root, 'README.md'), '# Demo\n');
+  mkdirSync(join(root, '.agents/commands'), { recursive: true });
+  writeFileSync(join(root, '.agents/commands/a.md'), '# A\n');
+  writeFileSync(join(root, '.agents/commands/b.md'), '# B\n');
+  mkdirSync(join(root, 'notes'), { recursive: true });
+  writeFileSync(join(root, 'notes/legacy.md'), '# Legacy\n');
+  mkdirSync(join(root, 'dist'), { recursive: true });
+  writeFileSync(join(root, 'dist/generated.md'), '# Generated\n');
   const envelope = run(['init', '--dry-run', '--root', root], { cwd: root });
   assert.equal(envelope.ok, true);
   assert.equal(envelope.data.dryRun, true);
   assert.equal(envelope.data.agent, 'generic');
   assert.equal(envelope.data.instructionFile, 'AGENTS.md');
+  assert.equal(envelope.data.impact.managedMarkdownCount, 4);
+  assert.deepEqual(
+    envelope.data.impact.managedMarkdown.map((markdown) => markdown.path).sort(),
+    ['.agents/commands/a.md', '.agents/commands/b.md', 'README.md', 'notes/legacy.md'],
+  );
+  assert.deepEqual(
+    envelope.data.impact.managedMarkdown
+      .filter((markdown) => markdown.path === 'README.md')
+      .map((markdown) => markdown.kind),
+    ['readme'],
+  );
+  assert.ok(
+    envelope.data.impact.skipCandidates.some(
+      (candidate) =>
+        candidate.path === '.agents/commands' &&
+        candidate.markdown.includes('.agents/commands/a.md') &&
+        candidate.markdown.includes('.agents/commands/b.md'),
+    ),
+  );
+  assert.ok(
+    envelope.data.impact.skipCandidates.some(
+      (candidate) =>
+        candidate.path === 'notes/legacy.md' &&
+        candidate.markdown.length === 1 &&
+        candidate.markdown[0] === 'notes/legacy.md',
+    ),
+  );
+  assert.deepEqual(envelope.data.impact.defaultSkippedMarkdown, [{ path: 'dist/generated.md' }]);
   assert.equal(existsSync(join(root, 'AGENTS.md')), false);
   assert.equal(existsSync(join(root, '.docs-harness/registry/document-types.json')), false);
   assert.equal(existsSync(join(root, '.docs-harness/.gitignore')), false);
@@ -1405,6 +1466,8 @@ test('config ignore excludes markdown from target scan and non-target signals', 
   assert.equal(readResult.status, 1);
   assert.equal(readResult.envelope.error.code, 'document_ignored');
   assert.match(readResult.envelope.error.message, /notes\/context\.md/);
+  assert.match(readResult.envelope.error.hint, /\.docs-harness\/config\.json/);
+  assert.match(readResult.envelope.error.hint, /remove or narrow/);
 
   waitForValue(
     () => readRuns(root).some((record) => record.command === 'graph'),
@@ -1469,7 +1532,9 @@ test('validate reports route entries that point to ignored markdown', () => {
         issue.code === 'ignored_target_referenced' &&
         issue.name === 'notes/context' &&
         issue.path === 'AGENTS.md' &&
-        issue.hint.includes('notes/context.md'),
+        issue.hint.includes('notes/context.md') &&
+        issue.hint.includes('.docs-harness/config.json') &&
+        issue.hint.includes('remove this route entry'),
     ),
   );
   assert.equal(

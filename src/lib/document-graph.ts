@@ -90,7 +90,7 @@ export async function loadDocumentGraph(root: string): Promise<DocumentGraph> {
 
   for (const path of markdownFiles) {
     const content = await readTextFile(resolvePath(root, path));
-    const target = buildTarget(path, content, config.instructionFileName, documentTypes);
+    const target = buildDocumentTarget(path, content, config.instructionFileName, documentTypes);
     if (isIgnored(path)) {
       ignoredDocuments.push({
         name: target.name,
@@ -243,7 +243,8 @@ export function getTargetOrThrow(graph: DocumentGraph, name: string): DocumentTa
     throw new CliError({
       code: 'document_ignored',
       message: `Document is excluded by docs-harness ignore config: ${ignoredDocument.path}.`,
-      hint: 'Remove or narrow the `ignore` rule if this document should be managed, then rerun `docs-harness validate`.',
+      hint:
+        'If this document should be managed, manually edit `.docs-harness/config.json` and remove or narrow the matching `ignore` pattern, then rerun `docs-harness validate`. Otherwise choose a managed document instead. For repair workflow, run `docs-harness skills read document-repair`.',
     });
   }
 
@@ -270,7 +271,7 @@ export function getTargetOrThrow(graph: DocumentGraph, name: string): DocumentTa
   });
 }
 
-function buildTarget(
+export function buildDocumentTarget(
   path: string,
   content: string,
   routeFileName: string,
@@ -371,7 +372,7 @@ async function findIgnoredDocumentByEntryName(
     if (!isIgnored(projectPath) || !fileExists(absolutePath)) continue;
 
     const content = await readTextFile(absolutePath);
-    const target = buildTarget(projectPath, content, routeFileName, documentTypes);
+    const target = buildDocumentTarget(projectPath, content, routeFileName, documentTypes);
     return {
       name: target.name,
       path: target.path,

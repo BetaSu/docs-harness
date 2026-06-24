@@ -10,6 +10,7 @@ import { commandIntent } from './commands/intent.js';
 import { commandSignal } from './commands/signal.js';
 import { commandSkills } from './commands/skills.js';
 import { commandTypes } from './commands/types.js';
+import { commandVersion } from './commands/version.js';
 import { commandWrite } from './commands/write.js';
 import { enqueueCommandLog } from './lib/logging.js';
 
@@ -50,6 +51,8 @@ async function dispatchCommand(root: string, args: ReturnType<typeof parseArgs>)
       return commandSchema(toSchemaAliasArgs(args));
     case 'schema':
       return commandSchema(args);
+    case 'version':
+      return commandVersion(args);
     case 'intent':
       return commandIntent(root, args);
     case 'signal':

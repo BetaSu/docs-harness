@@ -1,3 +1,4 @@
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -10,11 +11,16 @@ import { CliError } from "../lib/envelope.js";
 import {
   ensureDirectory,
   fileExists,
+  normalizePath,
   readTextFile,
   writeTextFile,
 } from "../lib/files.js";
-import { serializeBuiltinDocumentTypes } from "../lib/document-types.js";
-import { DEFAULT_IGNORE_PATTERNS } from "../lib/ignore.js";
+import {
+  loadDocumentTypes,
+  serializeBuiltinDocumentTypes,
+} from "../lib/document-types.js";
+import { buildDocumentTarget } from "../lib/document-graph.js";
+import { createIgnoreMatcher, DEFAULT_IGNORE_PATTERNS } from "../lib/ignore.js";
 import {
   getConfigPath,
   getHarnessDirectory,
@@ -38,10 +44,28 @@ type InitChange = {
   action: "create" | "update" | "noop";
 };
 
+type InitManagedMarkdown = {
+  path: string;
+  kind: string;
+};
+
+type InitSkipCandidate = {
+  path: string;
+  markdown: string[];
+};
+
+type InitImpact = {
+  managedMarkdownCount: number;
+  managedMarkdown: InitManagedMarkdown[];
+  skipCandidates: InitSkipCandidate[];
+  defaultSkippedMarkdown: Array<{ path: string }>;
+};
+
 export type InitData = {
   dryRun: boolean;
   agent: string;
   instructionFile: string;
+  impact: InitImpact;
   changes: InitChange[];
 };
 
@@ -64,6 +88,7 @@ export async function commandInit(
   };
   const routeContent = await buildRouteContent(root, target.instructionFile);
   const documentTypesContent = serializeBuiltinDocumentTypes();
+  const impact = await buildInitImpact(root, target.instructionFile);
   const changes = await planInit(
     root,
     config,
@@ -87,6 +112,7 @@ export async function commandInit(
     dryRun,
     agent: target.agent,
     instructionFile: target.instructionFile,
+    impact,
     changes,
   };
 }
@@ -239,6 +265,107 @@ function planCreateFile(root: string, path: string): InitChange {
     path,
     action: fileExists(join(root, path)) ? "noop" : "create",
   };
+}
+
+async function buildInitImpact(
+  root: string,
+  instructionFile: "AGENTS.md" | "CLAUDE.md"
+): Promise<InitImpact> {
+  const documentTypes = await loadDocumentTypes(root);
+  const targetableTypeNames = new Set(documentTypes.map((type) => type.name));
+  const isDefaultSkipped = createIgnoreMatcher(DEFAULT_IGNORE_PATTERNS);
+  const markdownFiles = await collectInitMarkdownFiles(root);
+  const managedMarkdown: InitManagedMarkdown[] = [];
+  const defaultSkippedMarkdown: Array<{ path: string }> = [];
+
+  for (const path of markdownFiles) {
+    if (isDefaultSkipped(path)) {
+      defaultSkippedMarkdown.push({ path });
+      continue;
+    }
+
+    const content = await readTextFile(join(root, path));
+    const target = buildDocumentTarget(path, content, instructionFile, documentTypes);
+    managedMarkdown.push({
+      path,
+      kind:
+        target.kind === "route" || targetableTypeNames.has(target.kind)
+          ? target.kind
+          : "non_target",
+    });
+  }
+
+  managedMarkdown.sort(compareByPath);
+  defaultSkippedMarkdown.sort(compareByPath);
+
+  return {
+    managedMarkdownCount: managedMarkdown.length,
+    managedMarkdown,
+    skipCandidates: buildSkipCandidates(managedMarkdown.map((markdown) => markdown.path)),
+    defaultSkippedMarkdown,
+  };
+}
+
+async function collectInitMarkdownFiles(
+  root: string,
+  relativeDirectory = "."
+): Promise<string[]> {
+  let entries;
+  try {
+    entries = await readdir(join(root, relativeDirectory), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const files: string[] = [];
+  for (const entry of entries) {
+    const relativePath =
+      relativeDirectory === "."
+        ? entry.name
+        : normalizePath(join(relativeDirectory, entry.name));
+
+    if (entry.isDirectory()) {
+      if (relativePath === ".git") continue;
+      files.push(...(await collectInitMarkdownFiles(root, relativePath)));
+      continue;
+    }
+
+    if (entry.isFile() && entry.name.endsWith(".md")) files.push(relativePath);
+  }
+
+  return files.sort();
+}
+
+function buildSkipCandidates(markdownPaths: string[]): InitSkipCandidate[] {
+  const pathsByParent = new Map<string, string[]>();
+  for (const path of markdownPaths) {
+    const parent = parentPath(path);
+    pathsByParent.set(parent, [...(pathsByParent.get(parent) ?? []), path]);
+  }
+
+  const groupedPaths = new Set<string>();
+  const candidates: InitSkipCandidate[] = [];
+  for (const [parent, paths] of pathsByParent.entries()) {
+    if (parent === "." || paths.length < 2) continue;
+    const markdown = [...paths].sort();
+    candidates.push({ path: parent, markdown });
+    for (const path of markdown) groupedPaths.add(path);
+  }
+
+  for (const path of markdownPaths) {
+    if (!groupedPaths.has(path)) candidates.push({ path, markdown: [path] });
+  }
+
+  return candidates.sort(compareByPath);
+}
+
+function parentPath(path: string): string {
+  const index = path.lastIndexOf("/");
+  return index < 0 ? "." : path.slice(0, index);
+}
+
+function compareByPath(left: { path: string }, right: { path: string }): number {
+  return left.path.localeCompare(right.path);
 }
 
 async function applyInit(

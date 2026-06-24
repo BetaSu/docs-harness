@@ -161,12 +161,23 @@ Use this when an agent needs to initialize ${context.cli} in a project, or bring
 function renderAgentInitFlow(context: SkillTemplateContext): string {
   return `## Agent Init Flow
 
-1. Run \`${context.cli} init --dry-run\`.
-2. Inspect the returned changes. If all changes are noop, continue. If files would be created or updated, explain the changes and run \`${context.cli} init --yes\` only after the user approves.
-3. Run \`${context.validateCommand}\`.
-4. If validation fails, read \`${context.cli} skills read ${context.documentRepairSkill}\`, repair every reported issue, then rerun \`${context.validateCommand}\`. Repeat until validation succeeds.
-5. When validation succeeds, summarize the initialized state, files changed, and any document decisions made during repair.
-6. Recommend that the user configure \`${context.cli} skills read ${context.documentQualityMaintenanceSkill}\` as a daily idle-time scheduled task so signals and intent drift are repaired automatically over time.`;
+1. Decide the init agent from your runtime identity:
+   - If you are Claude, use \`--agent claude\`.
+   - Otherwise, use \`--agent generic\`.
+2. Tell the user which agent identity and entry file you plan to use, then ask them to confirm or correct it.
+3. After the agent identity is confirmed, run \`${context.cli} init --agent <agent> --dry-run\`.
+4. Use data.impact to confirm the document management scope with the user:
+   - State how many Markdown documents will be managed.
+   - List data.impact.managedMarkdown in returned order.
+   - List data.impact.defaultSkippedMarkdown as documents you will not manage by default.
+   - Offer data.impact.skipCandidates as paths the user can ask you to skip for now.
+   - Do not explain the mechanical file changes from data.changes unless the user asks.
+5. After the user confirms the agent identity and management scope, run \`${context.cli} init --agent <agent> --yes\`.
+6. If the user asked you to skip paths, apply those skip choices to the project configuration after init and before validation. Keep the explanation user-facing: say you will ignore those paths for now, not how the configuration is implemented.
+7. Run \`${context.validateCommand}\`.
+8. If validation fails, read \`${context.cli} skills read ${context.documentRepairSkill}\`, repair every reported issue, then rerun \`${context.validateCommand}\`. Repeat until validation succeeds.
+9. When validation succeeds, summarize the initialized state and any document decisions made during repair.
+10. Recommend that the user configure \`${context.cli} skills read ${context.documentQualityMaintenanceSkill}\` as a daily idle-time document maintenance workflow. Use this skill to keep project documents synchronized with the actual project over time. If the current agent supports long-running or recurring capabilities such as goals, loops, scheduled tasks, monitors, or automations, recommend using that native capability to run the maintenance workflow automatically. Otherwise, tell the user they can run the maintenance skill manually when they want to clean up document drift.`;
 }
 
 function renderCommandContract(context: SkillTemplateContext): string {
@@ -268,8 +279,8 @@ function renderErrorRecovery(context: SkillTemplateContext): string {
 
 - unknown_flag, unknown_command, unknown_*_action, unknown_agent, missing_required_argument, path_not_directory, path_outside_root: fix the command arguments and retry.
 - document_not_found, document_type_not_found, skill_not_found, command_schema_not_found: run the relevant list, insight, schema, or validate command to discover valid names.
-- document_ignored: remove or narrow the config \`ignore\` rule if the document should be managed, or choose a managed document instead.
-- ignored_target_referenced: remove or narrow the config \`ignore\` rule for that target, or remove the route entry.
+- document_ignored: if the document should be managed, manually edit \`.docs-harness/config.json\` and remove or narrow the matching \`ignore\` pattern; otherwise choose a managed document.
+- ignored_target_referenced: if the target should be managed, manually edit \`.docs-harness/config.json\` and remove or narrow the matching \`ignore\` pattern; otherwise remove the route entry.
 - non_target_document: read the repair workflow and convert, migrate, or remove the existing non-target document.
 - route_not_found: initialize \`${context.cli}\`, create the needed route, or pass \`--no-route-entry\` only when the user explicitly wants an unlinked document.
 - validation_failed: read error.issues and repair each issue by code.
@@ -415,6 +426,7 @@ Use this flow for both validate issues and signal repair. The goal is to improve
    - If the content mixes responsibilities, identify which parts belong in other currently configured document types.
    - Rely on the configured type contracts returned by the CLI.
 5. Repair shape before metadata:
+   - For document_ignored or ignored_target_referenced, first decide whether the ignored Markdown should enter docs-harness management. If yes, manually edit \`.docs-harness/config.json\` and remove or narrow the matching \`ignore\` pattern before continuing repair. If no, choose another managed document or remove the stale route entry.
    - If the document shape is correct and only metadata or route entries are missing, repair those.
    - If the document is too large, stale, or mixes multiple responsibilities, split, shorten, or migrate content first.
    - If a non-target document contains useful agent-facing knowledge, consolidate it into one or more appropriate configured document types under the correct complete functional entity; create or update that entity's README and route only when needed, then delete the original loose document if its content has been fully migrated.

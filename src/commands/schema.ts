@@ -56,6 +56,22 @@ const COMMANDS: CommandSchema[] = [
     branches: ['unknown_flag', 'command_schema_not_found', 'success'],
   },
   {
+    id: 'version',
+    path: ['version'],
+    summary: 'Return the docs-harness CLI version.',
+    type: 'read',
+    visibility: 'internal',
+    args: [{ name: 'root', type: 'path', required: false }],
+    capabilities: {
+      output: { envelope: 'json', stdout: 'json-only' },
+      logs: LOG_CAPABILITY,
+    },
+    branches: ['unknown_flag', 'success'],
+    output: {
+      version: 'string',
+    },
+  },
+  {
     id: 'init',
     path: ['init'],
     summary: 'Create .docs-harness config, registry defaults, and the root route file.',
@@ -84,6 +100,20 @@ const COMMANDS: CommandSchema[] = [
       ],
     },
     branches: ['unknown_flag', 'unknown_agent', 'dry_run', 'confirmation_required', 'success'],
+    output: {
+      success: {
+        dryRun: 'boolean',
+        agent: ['generic', 'claude'],
+        instructionFile: 'string',
+        impact: {
+          managedMarkdownCount: 'number',
+          managedMarkdown: [{ path: 'string', kind: 'string' }],
+          skipCandidates: [{ path: 'string', markdown: ['string'] }],
+          defaultSkippedMarkdown: [{ path: 'string' }],
+        },
+        changes: [{ path: 'string', action: ['create', 'update', 'noop'] }],
+      },
+    },
   },
   {
     id: 'insight',

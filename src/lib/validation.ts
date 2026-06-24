@@ -94,8 +94,8 @@ function validateEntry(entry: DocumentEntry): ValidationIssue[] {
         message: `Agent-index target is excluded by docs-harness ignore config: ${entry.name || '<missing>'}.`,
         hint: repairHint(
           entry.ignoredTarget
-            ? `Remove or narrow the \`ignore\` rule for \`${entry.ignoredTarget.path}\`, or remove this route entry.`
-            : 'Remove or narrow the `ignore` rule for this target, or remove this route entry.',
+            ? `If \`${entry.ignoredTarget.path}\` should be managed, manually edit \`.docs-harness/config.json\` and remove or narrow the matching \`ignore\` pattern; otherwise remove this route entry.`
+            : 'If this target should be managed, manually edit `.docs-harness/config.json` and remove or narrow the matching `ignore` pattern; otherwise remove this route entry.',
         ),
       };
     }

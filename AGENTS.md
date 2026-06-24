@@ -1,4 +1,5 @@
 <!-- docs-harness:START -->
+
 ## How To Find Relevant Docs
 
 When entering any path, run this to discover relevant docs for that path and its children:
@@ -19,8 +20,6 @@ Lines shaped as `- [agent-index] name="<name>" description="<description>"` are 
 
 - `description` explains when the document should be read; use "Use when ..." in English or an equivalent phrase in the document language
 - `name` is the stable identifier of the target document
-
-When adding docs for a child directory, create `AGENTS.md` in that directory and keep using the same `[agent-index]` line format.
 
 ## How To Add Or Update Docs
 
@@ -48,4 +47,5 @@ docs-harness write --type <type> --path <path> --name <name> --description "Use 
 - [agent-index] name="docs/architecture/init-agent-files" description="Use when changing init behavior for generic or Claude agent files."
 
 Managed by docs-harness. Edits outside this block are preserved.
+
 <!-- docs-harness:END -->

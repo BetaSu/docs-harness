@@ -4,7 +4,7 @@
   "description": "Agent native project document graph CLI.",
   "type": "module",
   "bin": {
-    "docs-harness": "./dist/cli.js"
+    "docs-harness": "dist/cli.js"
   },
   "exports": {
     ".": {
@@ -31,7 +31,7 @@
     "docs"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.7.0"
