@@ -91,7 +91,7 @@ the document is used, or content that is too large for its role. A recurring
 maintenance loop can run `schedule-document-quality-maintenance` to process
 these signals and keep documentation quality aligned with the actual project.
 
-## API
+## CLI Commands
 
-docs-harness is an AI-native CLI; agents know which APIs to call, and humans do
-not need to learn them.
+docs-harness is an AI-native CLI; agents know which CLI command to run for each
+document task, and humans do not need to learn the command surface.

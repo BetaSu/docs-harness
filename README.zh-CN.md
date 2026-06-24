@@ -61,6 +61,6 @@ docs-harness 通过文档类型约束文档写入。
 
 这些信号代表文档使用中暴露出的偏差或摩擦，例如文档没有被正确索引、描述和实际用途不一致、内容过大或结构不适合当前功能。agent 可以通过周期性的修复 loop 执行 `schedule-document-quality-maintenance`，持续处理这些信号，让文档质量和项目实际状态保持同步。
 
-## API
+## CLI 命令说明
 
-docs-harness 是一套为 AI native 设计的 CLI；agent 自己知道该调用哪些 API，人类完全不需要了解。
+docs-harness 是一套为 AI native 设计的 CLI；agent 自己知道该调用哪个 CLI 命令，人类完全不需要了解命令细节。
