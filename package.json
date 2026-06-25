@@ -1,6 +1,6 @@
 {
   "name": "docs-harness",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Agent native project document graph CLI.",
   "type": "module",
   "bin": {

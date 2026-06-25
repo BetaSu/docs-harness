@@ -19,6 +19,8 @@ const DEFAULT_IGNORE = [
   'dist/**',
   'build/**',
   'coverage/**',
+  '.agents/skills/**/*.md',
+  '.claude/skills/**/*.md',
   '.docs-harness/logs/**',
 ];
 
@@ -277,7 +279,7 @@ test('schema is the default machine-readable command contract', () => {
   assert.equal(versionSchema.data.command.output.version, 'string');
   const versionEnvelope = run(['version'], { cwd: process.cwd() });
   assert.equal(versionEnvelope.ok, true);
-  assert.equal(versionEnvelope.data.version, '0.2.0');
+  assert.equal(versionEnvelope.data.version, '0.2.1');
 
   const validateEnvelope = run(['schema', '--command', 'validate'], { cwd: process.cwd() });
   assert.equal(validateEnvelope.ok, true);
@@ -915,6 +917,10 @@ test('init previews AGENTS.md setup without writing', () => {
   mkdirSync(join(root, '.agents/commands'), { recursive: true });
   writeFileSync(join(root, '.agents/commands/a.md'), '# A\n');
   writeFileSync(join(root, '.agents/commands/b.md'), '# B\n');
+  mkdirSync(join(root, '.agents/skills/docs-harness'), { recursive: true });
+  writeFileSync(join(root, '.agents/skills/docs-harness/SKILL.md'), '# Skill\n');
+  mkdirSync(join(root, '.claude/skills/review'), { recursive: true });
+  writeFileSync(join(root, '.claude/skills/review/SKILL.md'), '# Review Skill\n');
   mkdirSync(join(root, 'notes'), { recursive: true });
   writeFileSync(join(root, 'notes/legacy.md'), '# Legacy\n');
   mkdirSync(join(root, 'dist'), { recursive: true });
@@ -951,7 +957,11 @@ test('init previews AGENTS.md setup without writing', () => {
         candidate.markdown[0] === 'notes/legacy.md',
     ),
   );
-  assert.deepEqual(envelope.data.impact.defaultSkippedMarkdown, [{ path: 'dist/generated.md' }]);
+  assert.deepEqual(envelope.data.impact.defaultSkippedMarkdown, [
+    { path: '.agents/skills/docs-harness/SKILL.md' },
+    { path: '.claude/skills/review/SKILL.md' },
+    { path: 'dist/generated.md' },
+  ]);
   assert.equal(existsSync(join(root, 'AGENTS.md')), false);
   assert.equal(existsSync(join(root, '.docs-harness/registry/document-types.json')), false);
   assert.equal(existsSync(join(root, '.docs-harness/.gitignore')), false);
@@ -1012,7 +1022,7 @@ test('commands write deduplicated optimization signals discovered during executi
     () => readSignals(root).find((signal) => signal.frictionPattern === 'route_fallback'),
     'route_fallback signal',
   );
-  assert.equal(fallbackSignal.version, '0.2.0');
+  assert.equal(fallbackSignal.version, '0.2.1');
   assert.equal(fallbackSignal.handled, false);
   assert.equal(fallbackSignal.target.kind, 'module');
   assert.equal(fallbackSignal.target.path, 'packages/api/src');
