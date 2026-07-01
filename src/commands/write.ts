@@ -291,14 +291,40 @@ async function planWriteAction(
 function resolveTopicPath(root: string, rawPath: string): string {
   const absolutePath = resolvePath(root, rawPath || '.');
   assertInsideRoot(root, absolutePath, rawPath || '.');
+  const topicPath = toProjectPath(root, absolutePath);
+
+  if (looksLikeMarkdownDocumentPath(topicPath)) {
+    throw new CliError({
+      code: 'path_not_directory',
+      message: `\`--path\` must be a complete functional entity directory, not a document file path: ${rawPath}.`,
+      hint: buildDocumentPathHint(topicPath),
+    });
+  }
+
   if (fileExists(absolutePath) && !isDirectory(absolutePath)) {
     throw new CliError({
       code: 'path_not_directory',
       message: `\`--path\` must be a directory: ${rawPath}.`,
-      hint: 'Pass a directory path for the complete functional entity.',
+      hint: 'Pass the complete functional entity directory to `--path`; docs-harness chooses the document file path from `--type` and `--name`.',
     });
   }
-  return toProjectPath(root, absolutePath);
+  return topicPath;
+}
+
+function looksLikeMarkdownDocumentPath(path: string): boolean {
+  return path.endsWith('.md');
+}
+
+function buildDocumentPathHint(path: string): string {
+  const match = /^(?<topic>.+)\/docs\/(?<type>[^/]+)\/(?<name>[^/]+)\.md$/.exec(path);
+  if (match?.groups) {
+    return [
+      '`--path` is the complete functional entity directory.',
+      `Pass \`--path ${match.groups.topic}\` and \`--name ${match.groups.name}\`; docs-harness will place the ${match.groups.type} document under that entity's docs directory.`,
+    ].join(' ');
+  }
+
+  return 'Pass the complete functional entity directory to `--path`; docs-harness chooses the document file path from `--type` and `--name`.';
 }
 
 function resolveTargetPath(

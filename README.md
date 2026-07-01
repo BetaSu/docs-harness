@@ -1,3 +1,8 @@
+---
+name: README
+description: Use when understanding project overview, directory responsibilities, or basic usage.
+---
+
 # docs-harness
 
 English | [中文](./README.zh-CN.md)
