@@ -19,8 +19,8 @@ const DEFAULT_IGNORE = [
   'dist/**',
   'build/**',
   'coverage/**',
-  '.agents/skills/**/*.md',
-  '.claude/skills/**/*.md',
+  '.agents/**',
+  '.claude/**',
   '.docs-harness/logs/**',
 ];
 
@@ -279,7 +279,7 @@ test('schema is the default machine-readable command contract', () => {
   assert.equal(versionSchema.data.command.output.version, 'string');
   const versionEnvelope = run(['version'], { cwd: process.cwd() });
   assert.equal(versionEnvelope.ok, true);
-  assert.equal(versionEnvelope.data.version, '0.2.1');
+  assert.equal(versionEnvelope.data.version, '0.2.2');
 
   const validateEnvelope = run(['schema', '--command', 'validate'], { cwd: process.cwd() });
   assert.equal(validateEnvelope.ok, true);
@@ -930,10 +930,10 @@ test('init previews AGENTS.md setup without writing', () => {
   assert.equal(envelope.data.dryRun, true);
   assert.equal(envelope.data.agent, 'generic');
   assert.equal(envelope.data.instructionFile, 'AGENTS.md');
-  assert.equal(envelope.data.impact.managedMarkdownCount, 4);
+  assert.equal(envelope.data.impact.managedMarkdownCount, 2);
   assert.deepEqual(
     envelope.data.impact.managedMarkdown.map((markdown) => markdown.path).sort(),
-    ['.agents/commands/a.md', '.agents/commands/b.md', 'README.md', 'notes/legacy.md'],
+    ['README.md', 'notes/legacy.md'],
   );
   assert.deepEqual(
     envelope.data.impact.managedMarkdown
@@ -944,20 +944,14 @@ test('init previews AGENTS.md setup without writing', () => {
   assert.ok(
     envelope.data.impact.skipCandidates.some(
       (candidate) =>
-        candidate.path === '.agents/commands' &&
-        candidate.markdown.includes('.agents/commands/a.md') &&
-        candidate.markdown.includes('.agents/commands/b.md'),
-    ),
-  );
-  assert.ok(
-    envelope.data.impact.skipCandidates.some(
-      (candidate) =>
         candidate.path === 'notes/legacy.md' &&
         candidate.markdown.length === 1 &&
         candidate.markdown[0] === 'notes/legacy.md',
     ),
   );
   assert.deepEqual(envelope.data.impact.defaultSkippedMarkdown, [
+    { path: '.agents/commands/a.md' },
+    { path: '.agents/commands/b.md' },
     { path: '.agents/skills/docs-harness/SKILL.md' },
     { path: '.claude/skills/review/SKILL.md' },
     { path: 'dist/generated.md' },
@@ -1022,7 +1016,7 @@ test('commands write deduplicated optimization signals discovered during executi
     () => readSignals(root).find((signal) => signal.frictionPattern === 'route_fallback'),
     'route_fallback signal',
   );
-  assert.equal(fallbackSignal.version, '0.2.1');
+  assert.equal(fallbackSignal.version, '0.2.2');
   assert.equal(fallbackSignal.handled, false);
   assert.equal(fallbackSignal.target.kind, 'module');
   assert.equal(fallbackSignal.target.path, 'packages/api/src');
@@ -1589,6 +1583,11 @@ test('types list and describe expose built-in contracts', () => {
   assert.equal(describeEnvelope.data.type.name, 'runbook');
   assert.equal(describeEnvelope.data.type.requiresDescription, true);
   assert.ok(describeEnvelope.data.type.sections.some((section) => section.heading === 'Steps'));
+
+  const readmeEnvelope = run(['types', 'describe', 'readme'], { cwd: process.cwd() });
+  assert.equal(readmeEnvelope.ok, true);
+  assert.equal(readmeEnvelope.data.type.requiresName, true);
+  assert.equal(readmeEnvelope.data.type.requiresDescription, true);
 });
 
 test('types prefer project-local registry written by init', () => {
@@ -1787,6 +1786,8 @@ test('write previews readme without writing', () => {
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -1869,6 +1870,8 @@ test('dogfood flow writes docs, indexes them, discovers them, and validates grap
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -1891,6 +1894,8 @@ test('dogfood flow writes docs, indexes them, discovers them, and validates grap
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2106,6 +2111,8 @@ test('write typed document writes metadata after prerequisites exist', () => {
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2196,8 +2203,12 @@ test('write can skip route entry maintenance explicitly', () => {
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
+      '--description',
+      'Use when understanding the API package.',
       '--body',
       body,
       '--no-route-entry',
@@ -2213,10 +2224,12 @@ test('write can skip route entry maintenance explicitly', () => {
   assert.deepEqual(envelope.data.routeEntry, {
     enabled: false,
     name: 'packages/api/README',
-    description: '',
+    description: 'Use when understanding the API package.',
     action: 'skipped',
   });
-  assert.match(readFileSync(join(root, 'packages/api/README.md'), 'utf8'), /^# API/);
+  const written = readFileSync(join(root, 'packages/api/README.md'), 'utf8');
+  assert.match(written, /^---\nname: packages\/api\/README\n/m);
+  assert.match(written, /description: Use when understanding the API package\./);
 });
 
 test('write requires confirmation before document or route entry writes', () => {
@@ -2240,6 +2253,8 @@ test('write requires confirmation before document or route entry writes', () => 
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2292,6 +2307,8 @@ test('write updates an existing route entry description', () => {
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2349,6 +2366,8 @@ test('write keeps matching route entry as noop', () => {
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2393,6 +2412,8 @@ test('write creates managed graph section when route has no graph section', () =
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2445,6 +2466,8 @@ test('write creates graph section inside existing managed route block', () => {
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2499,6 +2522,8 @@ test('write migrates existing route entries into managed route block', () => {
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2538,6 +2563,8 @@ test('write reports missing ancestor route for linkable documents', () => {
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2556,6 +2583,36 @@ test('write reports missing ancestor route for linkable documents', () => {
   assert.equal(result.envelope.error.code, 'route_not_found');
   assert.match(result.envelope.error.hint, /--no-route-entry/);
   assert.match(result.envelope.error.hint, /docs-harness skills read document-repair/);
+});
+
+test('write rejects document file paths passed as the complete functional entity path', () => {
+  const root = mkdtempSync(join(tmpdir(), 'docs-harness-write-document-path-'));
+  run(['init', '--agent', 'generic', '--yes', '--root', root], { cwd: root });
+
+  const result = runFailure(
+    [
+      'write',
+      '--type',
+      'runbook',
+      '--path',
+      'packages/api/docs/runbook/deploy.md',
+      '--name',
+      'deploy',
+      '--description',
+      'Use when deploying the API.',
+      '--dry-run',
+      '--root',
+      root,
+    ],
+    { cwd: root },
+  );
+
+  assert.equal(result.status, 1);
+  assert.equal(result.envelope.ok, false);
+  assert.equal(result.envelope.error.code, 'path_not_directory');
+  assert.match(result.envelope.error.message, /complete functional entity directory/);
+  assert.match(result.envelope.error.hint, /--path packages\/api/);
+  assert.match(result.envelope.error.hint, /--name deploy/);
 });
 
 test('write rejects descriptions that cannot be encoded in agent-index attributes', () => {
@@ -2579,6 +2636,8 @@ test('write rejects descriptions that cannot be encoded in agent-index attribute
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2618,6 +2677,8 @@ test('write accepts localized description wording', () => {
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2670,6 +2731,8 @@ test('write rejects duplicate route entries for the target name', () => {
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',
@@ -2722,6 +2785,8 @@ test('write rejects invalid existing route entry syntax for the target name', ()
       'write',
       '--type',
       'readme',
+      '--name',
+      'api',
       '--path',
       'packages/api',
       '--description',

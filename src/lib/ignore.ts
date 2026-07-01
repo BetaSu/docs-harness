@@ -9,8 +9,8 @@ export const DEFAULT_IGNORE_PATTERNS = [
   'dist/**',
   'build/**',
   'coverage/**',
-  '.agents/skills/**/*.md',
-  '.claude/skills/**/*.md',
+  '.agents/**',
+  '.claude/**',
   '.docs-harness/logs/**',
 ];
 
